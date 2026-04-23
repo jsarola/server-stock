@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "servers-manager"
+version = "0.1.0"
+description = "Server management web application"
+authors = ["Your Name"]
+readme = "README.md"
+python = "^3.14"
+
+[tool.poetry.dependencies]
+python = "^3.14"
+flask = "^3.0.0"
+flask-sqlalchemy = "^3.1.1"
+flask-cors = "^4.0.0"
+werkzeug = "^3.0.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

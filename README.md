@@ -72,3 +72,12 @@ La base de dades s'inicialitza automàticament amb:
 
 - **express** — servidor web i API REST
 - **better-sqlite3** — base de dades SQLite integrada (sense servidor extern)
+
+
+## How to RUN
+poetry install
+
+poetry run
+
+### Model used
+ollama run glm-4.7-flash
