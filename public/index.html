@@ -246,6 +246,12 @@
       outline: none; transition: border-color 0.2s; width: 100%;
     }
     input:focus { border-color: var(--accent); }
+    input.field-error { border-color: var(--red); }
+
+    .field-error-msg {
+      font-family: var(--mono); font-size: 0.65rem;
+      color: var(--red); margin-top: 2px;
+    }
 
     .modal-footer {
       padding: 1rem 1.5rem; border-top: 1px solid var(--border);
@@ -533,6 +539,37 @@
     });
   }
 
+  const FIELD_IDS = {
+    name: 'f_name', vcpus: 'f_vcpus', memory: 'f_memory',
+    disk0: 'f_disk0', disk1: 'f_disk1', disk_extra: 'f_disk_extra',
+    data_alta: 'f_data_alta', data_baixa: 'f_data_baixa',
+  };
+
+  function clearFieldErrors() {
+    Object.values(FIELD_IDS).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('field-error');
+      const msg = el?.parentElement?.querySelector('.field-error-msg');
+      if (msg) msg.remove();
+    });
+  }
+
+  function showFieldErrors(errors) {
+    Object.entries(errors).forEach(([field, msg]) => {
+      const id = FIELD_IDS[field];
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.add('field-error');
+      const span = document.createElement('span');
+      span.className = 'field-error-msg';
+      span.textContent = msg;
+      el.parentElement.appendChild(span);
+    });
+    const firstErr = Object.keys(errors).map(f => FIELD_IDS[f]).find(Boolean);
+    if (firstErr) document.getElementById(firstErr)?.focus();
+  }
+
   function openModal(server = null) {
     editingId = server ? server.id : null;
     document.getElementById('modalTitle').textContent = server ? `Editar: ${server.name}` : 'Nou Servidor';
@@ -552,6 +589,7 @@
   }
 
   function closeModal() {
+    clearFieldErrors();
     document.getElementById('modalOverlay').classList.remove('open');
     editingId = null;
   }
@@ -561,16 +599,15 @@
   }
 
   async function saveServer() {
-    const name = document.getElementById('f_name').value.trim();
-    if (!name) { showToast('El nom és obligatori', 'error'); return; }
+    clearFieldErrors();
 
     const payload = {
-      name,
+      name: document.getElementById('f_name').value.trim(),
       servei: document.getElementById('f_servei').value.trim(),
       tipus: document.getElementById('f_tipus').value.trim(),
       equip: document.getElementById('f_equip').value.trim(),
-      data_alta: document.getElementById('f_data_alta').value,
-      data_baixa: document.getElementById('f_data_baixa').value,
+      data_alta: document.getElementById('f_data_alta').value || null,
+      data_baixa: document.getElementById('f_data_baixa').value || null,
       vcpus: parseInt(document.getElementById('f_vcpus').value) || 0,
       memory: parseInt(document.getElementById('f_memory').value) || 0,
       disk0: parseInt(document.getElementById('f_disk0').value) || 0,
@@ -587,7 +624,11 @@
     });
 
     const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Error', 'error'); return; }
+    if (!res.ok) {
+      showFieldErrors(data.errors || { name: data.error || 'Error desconegut' });
+      showToast('Corregeix els errors del formulari', 'error');
+      return;
+    }
 
     closeModal();
     showToast(editingId ? 'Servidor actualitzat ✓' : 'Servidor creat ✓', 'success');

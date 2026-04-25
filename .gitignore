@@ -43,3 +43,6 @@ Thumbs.db
 
 # Data
 db/
+
+# Environment
+.env
