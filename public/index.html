@@ -6,282 +6,7 @@
   <title>Gestió de Servidors</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #0a0e17;
-      --surface: #111827;
-      --surface2: #1a2235;
-      --border: #1e2d45;
-      --accent: #00d4ff;
-      --accent2: #7c3aed;
-      --green: #10b981;
-      --red: #ef4444;
-      --yellow: #f59e0b;
-      --text: #e2e8f0;
-      --text-muted: #64748b;
-      --mono: 'IBM Plex Mono', monospace;
-      --sans: 'IBM Plex Sans', sans-serif;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
-      background-size: 40px 40px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .app {
-      position: relative;
-      z-index: 1;
-      max-width: 1600px;
-      margin: 0 auto;
-      padding: 2rem;
-    }
-
-    header {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      margin-bottom: 2.5rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .brand { display: flex; align-items: center; gap: 1rem; }
-
-    .brand-icon {
-      width: 42px; height: 42px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--mono); font-weight: 600; font-size: 1.1rem; color: white;
-    }
-
-    .brand-text h1 {
-      font-family: var(--mono); font-size: 1.4rem; font-weight: 600;
-      letter-spacing: -0.02em; color: var(--text);
-    }
-
-    .brand-text span {
-      font-size: 0.75rem; color: var(--text-muted);
-      font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
-    }
-
-    .stats-bar { display: flex; gap: 1rem; margin-bottom: 2rem; }
-
-    .stat-card {
-      flex: 1; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 10px;
-      padding: 1rem 1.25rem; transition: border-color 0.2s;
-    }
-    .stat-card:hover { border-color: var(--accent); }
-
-    .stat-label {
-      font-family: var(--mono); font-size: 0.65rem;
-      letter-spacing: 0.12em; text-transform: uppercase;
-      color: var(--text-muted); margin-bottom: 0.4rem;
-    }
-
-    .stat-value { font-family: var(--mono); font-size: 1.6rem; font-weight: 600; color: var(--accent); }
-    .stat-unit { font-size: 0.7rem; color: var(--text-muted); margin-left: 3px; }
-
-    .toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
-
-    .search-box { flex: 1; position: relative; }
-
-    .search-box input {
-      width: 100%; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 8px;
-      padding: 0.6rem 1rem 0.6rem 2.5rem;
-      color: var(--text); font-family: var(--mono); font-size: 0.85rem;
-      outline: none; transition: border-color 0.2s;
-    }
-    .search-box input:focus { border-color: var(--accent); }
-    .search-box::before {
-      content: '⌕'; position: absolute; left: 0.75rem; top: 50%;
-      transform: translateY(-50%); color: var(--text-muted); font-size: 1.1rem;
-    }
-
-    .btn {
-      font-family: var(--mono); font-size: 0.8rem; font-weight: 500;
-      padding: 0.6rem 1.2rem; border-radius: 8px; border: none;
-      cursor: pointer; transition: all 0.15s; white-space: nowrap;
-    }
-    .btn-primary { background: var(--accent); color: var(--bg); }
-    .btn-primary:hover { background: #00b8d9; }
-    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
-    .btn-danger:hover { background: var(--red); color: white; }
-    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
-    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-
-    .table-wrap {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; overflow: hidden; overflow-x: auto;
-    }
-
-    table { width: 100%; border-collapse: collapse; }
-
-    thead { background: var(--surface2); border-bottom: 1px solid var(--border); }
-
-    th {
-      font-family: var(--mono); font-size: 0.65rem;
-      letter-spacing: 0.1em; text-transform: uppercase;
-      color: var(--text-muted); padding: 0.9rem 1rem;
-      text-align: left; font-weight: 500; white-space: nowrap;
-      user-select: none;
-    }
-
-    th.sortable {
-      cursor: pointer; transition: color 0.15s;
-    }
-    th.sortable:hover { color: var(--accent); }
-    th.sort-active { color: var(--accent); }
-
-    .sort-icon { margin-left: 4px; opacity: 0.5; font-size: 0.6rem; }
-    th.sort-active .sort-icon { opacity: 1; }
-
-    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: var(--surface2); }
-
-    td { padding: 0.85rem 1rem; font-size: 0.875rem; }
-
-    .cell-name { font-family: var(--mono); font-weight: 600; color: var(--accent); font-size: 0.85rem; }
-    .cell-num { font-family: var(--mono); color: var(--text); text-align: right; }
-    .cell-num.zero { color: var(--text-muted); }
-
-    .badge {
-      display: inline-block; padding: 0.15rem 0.6rem;
-      border-radius: 999px; font-family: var(--mono); font-size: 0.7rem; font-weight: 500;
-    }
-    .badge-tipus { background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
-    .badge-equip { background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
-    .badge-servei { background: rgba(0,212,255,0.08); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); font-size: 0.68rem; }
-
-    .actions { display: flex; gap: 0.5rem; }
-
-    .icon-btn {
-      width: 30px; height: 30px;
-      display: flex; align-items: center; justify-content: center;
-      border-radius: 6px; border: 1px solid var(--border);
-      background: transparent; cursor: pointer;
-      color: var(--text-muted); font-size: 0.85rem; transition: all 0.15s;
-    }
-    .icon-btn:hover.edit { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.08); }
-    .icon-btn:hover.delete { border-color: var(--red); color: var(--red); background: rgba(239,68,68,0.08); }
-
-    .empty-state { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
-    .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
-    .empty-state p { font-family: var(--mono); font-size: 0.85rem; }
-
-    .modal-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
-      z-index: 100; display: flex; align-items: center; justify-content: center;
-      opacity: 0; pointer-events: none; transition: opacity 0.2s;
-    }
-    .modal-overlay.open { opacity: 1; pointer-events: all; }
-
-    .modal {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 16px; width: 640px; max-width: 95vw;
-      max-height: 90vh; overflow-y: auto;
-      transform: translateY(20px); transition: transform 0.2s;
-    }
-    .modal-overlay.open .modal { transform: translateY(0); }
-
-    .modal-header {
-      padding: 1.5rem; border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .modal-title { font-family: var(--mono); font-size: 1rem; font-weight: 600; }
-
-    .modal-close {
-      width: 30px; height: 30px;
-      display: flex; align-items: center; justify-content: center;
-      border-radius: 6px; border: 1px solid var(--border);
-      background: transparent; cursor: pointer;
-      color: var(--text-muted); font-size: 1.1rem; transition: all 0.15s;
-    }
-    .modal-close:hover { border-color: var(--red); color: var(--red); }
-
-    .modal-body { padding: 1.5rem; }
-
-    .form-section {
-      font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.12em;
-      text-transform: uppercase; color: var(--text-muted);
-      margin: 1.2rem 0 0.75rem;
-      padding-bottom: 0.4rem; border-bottom: 1px solid var(--border);
-    }
-    .form-section:first-child { margin-top: 0; }
-
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
-    .form-group.full { grid-column: 1 / -1; }
-
-    label {
-      font-family: var(--mono); font-size: 0.65rem;
-      letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted);
-    }
-
-    input[type="text"], input[type="number"], input[type="date"] {
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 7px; padding: 0.55rem 0.8rem;
-      color: var(--text); font-family: var(--mono); font-size: 0.85rem;
-      outline: none; transition: border-color 0.2s; width: 100%;
-    }
-    input:focus { border-color: var(--accent); }
-    input.field-error { border-color: var(--red); }
-
-    .field-error-msg {
-      font-family: var(--mono); font-size: 0.65rem;
-      color: var(--red); margin-top: 2px;
-    }
-
-    .modal-footer {
-      padding: 1rem 1.5rem; border-top: 1px solid var(--border);
-      display: flex; justify-content: flex-end; gap: 0.75rem;
-    }
-
-    .toast {
-      position: fixed; bottom: 2rem; right: 2rem;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 0.8rem 1.2rem;
-      font-family: var(--mono); font-size: 0.8rem;
-      display: flex; align-items: center; gap: 0.6rem;
-      z-index: 200; transform: translateY(100px); opacity: 0; transition: all 0.3s;
-    }
-    .toast.show { transform: translateY(0); opacity: 1; }
-    .toast.success { border-left: 3px solid var(--green); }
-    .toast.error { border-left: 3px solid var(--red); }
-
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-
-    @media (max-width: 768px) {
-      .stats-bar { flex-wrap: wrap; }
-      .stat-card { min-width: calc(50% - 0.5rem); }
-      .form-grid { grid-template-columns: 1fr; }
-      th, td { padding: 0.7rem 0.6rem; }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -296,7 +21,7 @@
     </div>
   </header>
 
-  <div class="stats-bar" id="statsBar">
+  <div class="stats-bar">
     <div class="stat-card">
       <div class="stat-label">Servidors</div>
       <div class="stat-value" id="statTotal">—</div>
@@ -317,9 +42,11 @@
 
   <div class="toolbar">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Cercar per nom, servei, tipus, equip..." oninput="filterAndRender()">
+      <input type="text" id="searchInput" placeholder="Cercar per nom, service, running, equip, usos..." oninput="filterAndRender()">
     </div>
     <button class="btn btn-ghost" onclick="resetSort()" id="btnResetSort" style="display:none">↺ Ordre</button>
+    <button class="btn btn-ghost" onclick="openUsesModal()">⚙ Usos</button>
+    <button class="btn btn-ghost" onclick="openRunningModal()">⚙ Running</button>
     <button class="btn btn-primary" onclick="openModal()">+ Nou Servidor</button>
   </div>
 
@@ -334,8 +61,9 @@
           <th class="sortable" onclick="sortBy('disk1')" style="text-align:right">Disk-1 <span class="sort-icon" id="si_disk1">⇅</span></th>
           <th class="sortable" onclick="sortBy('disk_extra')" style="text-align:right">Disk+ <span class="sort-icon" id="si_disk_extra">⇅</span></th>
           <th class="sortable" onclick="sortBy('disk_total')" style="text-align:right">Total Disc <span class="sort-icon" id="si_disk_total">⇅</span></th>
-          <th>Servei</th>
-          <th>Tipus</th>
+          <th>Service</th>
+          <th>Running</th>
+          <th>Uses</th>
           <th>Equip</th>
           <th class="sortable" onclick="sortBy('data_alta')">Data Alta <span class="sort-icon" id="si_data_alta">⇅</span></th>
           <th class="sortable" onclick="sortBy('data_baixa')">Data Baixa <span class="sort-icon" id="si_data_baixa">⇅</span></th>
@@ -343,13 +71,13 @@
         </tr>
       </thead>
       <tbody id="tableBody">
-        <tr><td colspan="13"><div class="empty-state"><div class="icon">⟳</div><p>Carregant...</p></div></td></tr>
+        <tr><td colspan="14"><div class="empty-state"><div class="icon">⟳</div><p>Carregant...</p></div></td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- Modal -->
+<!-- Server modal -->
 <div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
   <div class="modal">
     <div class="modal-header">
@@ -364,12 +92,20 @@
           <input type="text" id="f_name" placeholder="nom-servidor">
         </div>
         <div class="form-group">
-          <label>Servei</label>
-          <input type="text" id="f_servei" placeholder="ex: postgres+python">
+          <label>Service</label>
+          <select id="f_service">
+            <option value="">— Sense service —</option>
+            <option value="Testing">Testing</option>
+            <option value="Production">Production</option>
+            <option value="Staging">Staging</option>
+            <option value="Development">Development</option>
+          </select>
         </div>
         <div class="form-group">
-          <label>Tipus</label>
-          <input type="text" id="f_tipus" placeholder="ex: Testing, Prod">
+          <label>Running</label>
+          <select id="f_running_id">
+            <option value="">— No definit —</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Equip</label>
@@ -383,6 +119,10 @@
           <label>Data Baixa</label>
           <input type="date" id="f_data_baixa">
         </div>
+      </div>
+      <div class="form-section">Usos</div>
+      <div class="form-group full">
+        <div id="f_uses_list" class="uses-checklist"></div>
       </div>
       <div class="form-section">Maquinari</div>
       <div class="form-grid">
@@ -415,250 +155,63 @@
   </div>
 </div>
 
+<!-- Uses management modal -->
+<div class="modal-overlay modal-sm" id="usesModalOverlay" onclick="handleUsesOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Gestionar Usos</div>
+      <button class="modal-close" onclick="closeUsesModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="add-use-row">
+        <input type="text" id="newUseName" placeholder="Nou ús (ex: postgresql)..." onkeydown="if(event.key==='Enter') createUse()">
+        <button class="btn btn-primary" onclick="createUse()">+ Afegir</button>
+      </div>
+      <div id="usesManagerList"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeUsesModal()">Tancar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Running management modal -->
+<div class="modal-overlay" id="runningModalOverlay" onclick="handleRunningOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Gestionar Running</div>
+      <button class="modal-close" onclick="closeRunningModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="margin-bottom:1rem">
+        <div class="form-group">
+          <label for="newRunningName">Nom *</label>
+          <input type="text" id="newRunningName" placeholder="ex: actiu" onkeydown="if(event.key==='Enter') saveRunning()">
+        </div>
+        <div class="form-group">
+          <label for="newRunningCreate">Data creació</label>
+          <input type="date" id="newRunningCreate">
+        </div>
+        <div class="form-group">
+          <label for="newRunningDelete">Data baixa</label>
+          <input type="date" id="newRunningDelete">
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:0.4rem">
+          <button class="btn btn-primary" id="btnSaveRunning" onclick="saveRunning()">+ Afegir</button>
+          <button class="btn btn-ghost" id="btnCancelRunning" onclick="cancelRunningEdit()" style="display:none;font-size:0.72rem;padding:0.4rem 0.8rem">Cancel·lar</button>
+        </div>
+      </div>
+      <div id="runningManagerList"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRunningModal()">Tancar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script>
-  let allServers = [];
-  let editingId = null;
-  let sortState = { key: null, dir: 1 };
-
-  async function loadServers() {
-    const res = await fetch('/api/servers');
-    allServers = await res.json();
-    filterAndRender();
-    loadStats();
-  }
-
-  async function loadStats() {
-    const res = await fetch('/api/stats');
-    const s = await res.json();
-    document.getElementById('statTotal').textContent = s.total_servers;
-    document.getElementById('statVcpus').textContent = s.total_vcpus || 0;
-    document.getElementById('statMemory').innerHTML = `${s.total_memory_gb || 0}<span class="stat-unit">GB</span>`;
-    document.getElementById('statDisk').innerHTML = `${s.total_disk_gb || 0}<span class="stat-unit">GB</span>`;
-  }
-
-  function diskTotal(s) {
-    return (s.disk0 || 0) + (s.disk1 || 0) + (s.disk_extra || 0);
-  }
-
-  function fmtDate(val) {
-    if (!val) return '—';
-    // stored as yyyy-mm-dd (HTML date input), display as dd/mm/yyyy
-    const parts = val.split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    return val;
-  }
-
-  function renderTable(servers) {
-    const tbody = document.getElementById('tableBody');
-    if (!servers.length) {
-      tbody.innerHTML = `<tr><td colspan="13"><div class="empty-state"><div class="icon">◌</div><p>No s'han trobat servidors</p></div></td></tr>`;
-      return;
-    }
-    tbody.innerHTML = servers.map(s => {
-      const total = diskTotal(s);
-      return `
-      <tr>
-        <td><span class="cell-name">${s.name}</span></td>
-        <td class="cell-num">${s.vcpus}</td>
-        <td class="cell-num">${s.memory}</td>
-        <td class="cell-num ${s.disk0 === 0 ? 'zero' : ''}">${s.disk0}</td>
-        <td class="cell-num ${s.disk1 === 0 ? 'zero' : ''}">${s.disk1 || '—'}</td>
-        <td class="cell-num ${s.disk_extra === 0 ? 'zero' : ''}">${s.disk_extra || '—'}</td>
-        <td class="cell-num"><strong>${total}</strong></td>
-        <td>${s.servei ? `<span class="badge badge-servei">${s.servei}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td>${s.tipus ? `<span class="badge badge-tipus">${s.tipus}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td>${s.equip ? `<span class="badge badge-equip">${s.equip}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td style="font-family:var(--mono);font-size:0.8rem;color:var(--text-muted)">${fmtDate(s.data_alta)}</td>
-        <td style="font-family:var(--mono);font-size:0.8rem;color:${s.data_baixa ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtDate(s.data_baixa)}</td>
-        <td>
-          <div class="actions">
-            <button class="icon-btn edit" onclick="editServer(${s.id})" title="Editar">✎</button>
-            <button class="icon-btn delete" onclick="deleteServer(${s.id}, '${s.name}')" title="Eliminar">✕</button>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
-  }
-
-  function filterAndRender() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    let list = allServers.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      (s.servei || '').toLowerCase().includes(q) ||
-      (s.tipus || '').toLowerCase().includes(q) ||
-      (s.equip || '').toLowerCase().includes(q)
-    );
-
-    if (sortState.key) {
-      list = [...list].sort((a, b) => {
-        const va = sortState.key === 'disk_total' ? diskTotal(a) : (a[sortState.key] ?? '');
-        const vb = sortState.key === 'disk_total' ? diskTotal(b) : (b[sortState.key] ?? '');
-        if (typeof va === 'number') return (va - vb) * sortState.dir;
-        return String(va).localeCompare(String(vb)) * sortState.dir;
-      });
-    }
-
-    renderTable(list);
-  }
-
-  function sortBy(key) {
-    if (sortState.key === key) {
-      sortState.dir *= -1;
-    } else {
-      sortState.key = key;
-      sortState.dir = 1;
-    }
-    updateSortHeaders();
-    filterAndRender();
-    document.getElementById('btnResetSort').style.display = '';
-  }
-
-  function resetSort() {
-    sortState = { key: null, dir: 1 };
-    updateSortHeaders();
-    filterAndRender();
-    document.getElementById('btnResetSort').style.display = 'none';
-  }
-
-  function updateSortHeaders() {
-    const keys = ['name','vcpus','memory','disk0','disk1','disk_extra','disk_total','data_alta','data_baixa'];
-    keys.forEach(k => {
-      const el = document.getElementById(`si_${k}`);
-      const th = el?.closest('th');
-      if (!el || !th) return;
-      if (sortState.key === k) {
-        el.textContent = sortState.dir === 1 ? '▲' : '▼';
-        th.classList.add('sort-active');
-      } else {
-        el.textContent = '⇅';
-        th.classList.remove('sort-active');
-      }
-    });
-  }
-
-  const FIELD_IDS = {
-    name: 'f_name', vcpus: 'f_vcpus', memory: 'f_memory',
-    disk0: 'f_disk0', disk1: 'f_disk1', disk_extra: 'f_disk_extra',
-    data_alta: 'f_data_alta', data_baixa: 'f_data_baixa',
-  };
-
-  function clearFieldErrors() {
-    Object.values(FIELD_IDS).forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.classList.remove('field-error');
-      const msg = el?.parentElement?.querySelector('.field-error-msg');
-      if (msg) msg.remove();
-    });
-  }
-
-  function showFieldErrors(errors) {
-    Object.entries(errors).forEach(([field, msg]) => {
-      const id = FIELD_IDS[field];
-      if (!id) return;
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.classList.add('field-error');
-      const span = document.createElement('span');
-      span.className = 'field-error-msg';
-      span.textContent = msg;
-      el.parentElement.appendChild(span);
-    });
-    const firstErr = Object.keys(errors).map(f => FIELD_IDS[f]).find(Boolean);
-    if (firstErr) document.getElementById(firstErr)?.focus();
-  }
-
-  function openModal(server = null) {
-    editingId = server ? server.id : null;
-    document.getElementById('modalTitle').textContent = server ? `Editar: ${server.name}` : 'Nou Servidor';
-    document.getElementById('f_name').value = server?.name || '';
-    document.getElementById('f_servei').value = server?.servei || '';
-    document.getElementById('f_tipus').value = server?.tipus || '';
-    document.getElementById('f_equip').value = server?.equip || '';
-    document.getElementById('f_data_alta').value = server?.data_alta || '';
-    document.getElementById('f_data_baixa').value = server?.data_baixa || '';
-    document.getElementById('f_vcpus').value = server?.vcpus || '';
-    document.getElementById('f_memory').value = server?.memory || '';
-    document.getElementById('f_disk0').value = server?.disk0 || '';
-    document.getElementById('f_disk1').value = server?.disk1 || '';
-    document.getElementById('f_disk_extra').value = server?.disk_extra || '';
-    document.getElementById('modalOverlay').classList.add('open');
-    setTimeout(() => document.getElementById('f_name').focus(), 100);
-  }
-
-  function closeModal() {
-    clearFieldErrors();
-    document.getElementById('modalOverlay').classList.remove('open');
-    editingId = null;
-  }
-
-  function handleOverlayClick(e) {
-    if (e.target === document.getElementById('modalOverlay')) closeModal();
-  }
-
-  async function saveServer() {
-    clearFieldErrors();
-
-    const payload = {
-      name: document.getElementById('f_name').value.trim(),
-      servei: document.getElementById('f_servei').value.trim(),
-      tipus: document.getElementById('f_tipus').value.trim(),
-      equip: document.getElementById('f_equip').value.trim(),
-      data_alta: document.getElementById('f_data_alta').value || null,
-      data_baixa: document.getElementById('f_data_baixa').value || null,
-      vcpus: parseInt(document.getElementById('f_vcpus').value) || 0,
-      memory: parseInt(document.getElementById('f_memory').value) || 0,
-      disk0: parseInt(document.getElementById('f_disk0').value) || 0,
-      disk1: parseInt(document.getElementById('f_disk1').value) || 0,
-      disk_extra: parseInt(document.getElementById('f_disk_extra').value) || 0,
-    };
-
-    const url = editingId ? `/api/servers/${editingId}` : '/api/servers';
-    const method = editingId ? 'PUT' : 'POST';
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      showFieldErrors(data.errors || { name: data.error || 'Error desconegut' });
-      showToast('Corregeix els errors del formulari', 'error');
-      return;
-    }
-
-    closeModal();
-    showToast(editingId ? 'Servidor actualitzat ✓' : 'Servidor creat ✓', 'success');
-    await loadServers();
-  }
-
-  function editServer(id) {
-    const server = allServers.find(s => s.id === id);
-    if (server) openModal(server);
-  }
-
-  async function deleteServer(id, name) {
-    if (!confirm(`Eliminar el servidor "${name}"?`)) return;
-    const res = await fetch(`/api/servers/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      showToast(`"${name}" eliminat`, 'success');
-      await loadServers();
-    } else {
-      showToast('Error en eliminar', 'error');
-    }
-  }
-
-  function showToast(msg, type = 'success') {
-    const t = document.getElementById('toast');
-    t.textContent = (type === 'success' ? '✓ ' : '✕ ') + msg;
-    t.className = `toast ${type} show`;
-    setTimeout(() => t.classList.remove('show'), 3000);
-  }
-
-  loadServers();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
