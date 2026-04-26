@@ -47,6 +47,7 @@
     <button class="btn btn-ghost" onclick="resetSort()" id="btnResetSort" style="display:none">↺ Ordre</button>
     <button class="btn btn-ghost" onclick="openUsesModal()">⚙ Usos</button>
     <button class="btn btn-ghost" onclick="openRunningModal()">⚙ Running</button>
+    <button class="btn btn-ghost" onclick="openReportModal()">Informe</button>
     <button class="btn btn-primary" onclick="openModal()">+ Nou Servidor</button>
   </div>
 
@@ -205,6 +206,105 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeRunningModal()">Tancar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hardware history modal -->
+<div class="modal-overlay modal-wide" id="hwHistoryOverlay" onclick="handleHwHistoryOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="hwHistoryTitle">Historial de Maquinari</div>
+      <button class="modal-close" onclick="closeHwHistoryModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hw-add-row" id="hwAddRow">
+        <input type="date" id="hwAddDate" title="Data">
+        <input type="number" id="hwAddVcpus" min="0" placeholder="vCPUs">
+        <input type="number" id="hwAddMemory" min="0" placeholder="Mem GB">
+        <input type="number" id="hwAddDisk0" min="0" placeholder="Disk-0 GB">
+        <input type="number" id="hwAddDisk1" min="0" placeholder="Disk-1 GB">
+        <input type="number" id="hwAddDiskExtra" min="0" placeholder="Disk+ GB">
+        <button class="btn btn-primary" onclick="createHwSnapshot()">+ Afegir</button>
+      </div>
+      <div class="hw-history-wrap">
+        <table class="hw-history-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th class="num">vCPUs</th>
+              <th class="num">Mem (GB)</th>
+              <th class="num">Disk-0</th>
+              <th class="num">Disk-1</th>
+              <th class="num">Disk+</th>
+              <th class="num">Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="hwHistoryBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeHwHistoryModal()">Tancar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hardware report modal -->
+<div class="modal-overlay modal-wide" id="reportModalOverlay" onclick="handleReportOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Informe de Maquinari</div>
+      <button class="modal-close" onclick="closeReportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="report-filters">
+        <div class="report-filter-group">
+          <label>Data de consulta</label>
+          <input type="date" id="reportDate">
+        </div>
+        <div class="report-filter-group">
+          <label>Service</label>
+          <select id="reportService" onchange="applyReportFilters()">
+            <option value="">Tots els services</option>
+            <option>Testing</option>
+            <option>Production</option>
+            <option>Staging</option>
+            <option>Development</option>
+          </select>
+        </div>
+        <div class="report-filter-group">
+          <label>Equip</label>
+          <select id="reportEquip" onchange="applyReportFilters()">
+            <option value="">Tots els equips</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="runReport()" style="align-self:flex-start">Consultar</button>
+      </div>
+      <div id="reportResults"></div>
+    </div>
+    <div class="modal-footer">
+      <div id="reportStats" class="report-stats"></div>
+      <button class="btn btn-ghost" id="btnInvoice" onclick="openInvoiceModal()" style="display:none">Factura</button>
+      <button class="btn btn-ghost" onclick="closeReportModal()">Tancar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice modal -->
+<div class="modal-overlay modal-wide" id="invoiceModalOverlay" onclick="handleInvoiceOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="invoiceTitle">Factura</div>
+      <button class="modal-close" onclick="closeInvoiceModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="invoiceResults"></div>
+    </div>
+    <div class="modal-footer">
+      <div id="invoiceGrandTotal" class="invoice-grand-total"></div>
+      <button class="btn btn-ghost" onclick="closeInvoiceModal()">Tancar</button>
     </div>
   </div>
 </div>

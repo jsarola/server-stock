@@ -79,6 +79,7 @@ function renderTable(servers) {
       <td>
         <div class="actions">
           <button class="icon-btn edit" onclick="editServer(${s.id})" title="Editar">✎</button>
+          <button class="icon-btn icon-btn-hw" onclick="openHwHistoryModal(${s.id}, '${s.name.replace(/'/g, "\\'")}')" title="Historial maquinari">HW</button>
           <button class="icon-btn delete" onclick="deleteServer(${s.id}, '${s.name}')" title="Eliminar">✕</button>
         </div>
       </td>
@@ -662,6 +663,357 @@ async function deletePriceRow(runningId, priceId) {
   } else {
     showToast('Error en eliminar', 'error');
   }
+}
+
+// ── Hardware history ──────────────────────────────────────────────────────────
+
+let hwHistoryServerId = null;
+let hwHistoryRecords = [];
+let editingHwDate = null;
+
+function openHwHistoryModal(serverId, serverName) {
+  hwHistoryServerId = serverId;
+  editingHwDate = null;
+  document.getElementById('hwHistoryTitle').textContent = `Historial Maquinari — ${serverName}`;
+  document.getElementById('hwHistoryOverlay').classList.add('open');
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('hwAddDate').value = today;
+  document.getElementById('hwAddVcpus').value = '';
+  document.getElementById('hwAddMemory').value = '';
+  document.getElementById('hwAddDisk0').value = '';
+  document.getElementById('hwAddDisk1').value = '';
+  document.getElementById('hwAddDiskExtra').value = '';
+  loadHwHistory();
+}
+
+function closeHwHistoryModal() {
+  document.getElementById('hwHistoryOverlay').classList.remove('open');
+  hwHistoryServerId = null;
+  editingHwDate = null;
+}
+
+function handleHwHistoryOverlayClick(e) {
+  if (e.target === document.getElementById('hwHistoryOverlay')) closeHwHistoryModal();
+}
+
+async function loadHwHistory() {
+  const res = await fetch(`/api/servers/${hwHistoryServerId}/history`);
+  hwHistoryRecords = await res.json();
+  renderHwHistory();
+}
+
+function renderHwHistory() {
+  const tbody = document.getElementById('hwHistoryBody');
+  if (!hwHistoryRecords.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem">Cap registre de maquinari</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = hwHistoryRecords.map(r => {
+    const total = diskTotal(r);
+    if (editingHwDate === r.data_modificacio) {
+      return `<tr class="editing">
+        <td><input type="date" id="hw_edit_date" value="${r.data_modificacio}"></td>
+        <td class="num"><input type="number" id="hw_edit_vcpus" min="0" value="${r.vcpus}"></td>
+        <td class="num"><input type="number" id="hw_edit_memory" min="0" value="${r.memory}"></td>
+        <td class="num"><input type="number" id="hw_edit_disk0" min="0" value="${r.disk0}"></td>
+        <td class="num"><input type="number" id="hw_edit_disk1" min="0" value="${r.disk1}"></td>
+        <td class="num"><input type="number" id="hw_edit_disk_extra" min="0" value="${r.disk_extra}"></td>
+        <td class="num">—</td>
+        <td class="actions-cell">
+          <button class="hw-btn save" onclick="saveHwRow('${r.data_modificacio}')">✓</button>
+          <button class="hw-btn" onclick="cancelHwEdit()">✕</button>
+        </td>
+      </tr>`;
+    }
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:0.8rem">${fmtDate(r.data_modificacio)}</td>
+      <td class="num">${r.vcpus}</td>
+      <td class="num">${r.memory}</td>
+      <td class="num">${r.disk0}</td>
+      <td class="num">${r.disk1 || '—'}</td>
+      <td class="num">${r.disk_extra || '—'}</td>
+      <td class="num"><strong>${total}</strong></td>
+      <td class="actions-cell">
+        <button class="hw-btn edit" onclick="editHwRow('${r.data_modificacio}')">✎</button>
+        <button class="hw-btn del" onclick="deleteHwRow('${r.data_modificacio}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function editHwRow(date) {
+  editingHwDate = date;
+  renderHwHistory();
+}
+
+function cancelHwEdit() {
+  editingHwDate = null;
+  renderHwHistory();
+}
+
+async function saveHwRow(originalDate) {
+  const newDate = document.getElementById('hw_edit_date').value;
+  if (!newDate) { showToast('La data és obligatòria', 'error'); return; }
+  const payload = {
+    data_modificacio: newDate,
+    vcpus:      parseInt(document.getElementById('hw_edit_vcpus').value) || 0,
+    memory:     parseInt(document.getElementById('hw_edit_memory').value) || 0,
+    disk0:      parseInt(document.getElementById('hw_edit_disk0').value) || 0,
+    disk1:      parseInt(document.getElementById('hw_edit_disk1').value) || 0,
+    disk_extra: parseInt(document.getElementById('hw_edit_disk_extra').value) || 0,
+  };
+  const res = await fetch(`/api/servers/${hwHistoryServerId}/history/${originalDate}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    showToast(d.error || 'Error en guardar', 'error');
+    return;
+  }
+  editingHwDate = null;
+  showToast('Registre actualitzat ✓');
+  await Promise.all([loadHwHistory(), loadServers()]);
+}
+
+async function createHwSnapshot() {
+  const dateVal = document.getElementById('hwAddDate').value;
+  if (!dateVal) { showToast('La data és obligatòria', 'error'); return; }
+  const payload = {
+    data_modificacio: dateVal,
+    vcpus:      parseInt(document.getElementById('hwAddVcpus').value) || 0,
+    memory:     parseInt(document.getElementById('hwAddMemory').value) || 0,
+    disk0:      parseInt(document.getElementById('hwAddDisk0').value) || 0,
+    disk1:      parseInt(document.getElementById('hwAddDisk1').value) || 0,
+    disk_extra: parseInt(document.getElementById('hwAddDiskExtra').value) || 0,
+  };
+  const res = await fetch(`/api/servers/${hwHistoryServerId}/history`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    showToast(d.error || 'Error en crear', 'error');
+    return;
+  }
+  document.getElementById('hwAddVcpus').value = '';
+  document.getElementById('hwAddMemory').value = '';
+  document.getElementById('hwAddDisk0').value = '';
+  document.getElementById('hwAddDisk1').value = '';
+  document.getElementById('hwAddDiskExtra').value = '';
+  showToast('Registre afegit ✓');
+  await Promise.all([loadHwHistory(), loadServers()]);
+}
+
+async function deleteHwRow(date) {
+  if (!confirm(`Eliminar el registre del ${fmtDate(date)}?`)) return;
+  const res = await fetch(`/api/servers/${hwHistoryServerId}/history/${date}`, { method: 'DELETE' });
+  if (!res.ok) { showToast('Error en eliminar', 'error'); return; }
+  showToast('Registre eliminat');
+  await Promise.all([loadHwHistory(), loadServers()]);
+}
+
+// ── Hardware report ───────────────────────────────────────────────────────────
+
+function applyActiveFilters(data) {
+  const filterService = document.getElementById('reportService').value;
+  const filterEquip   = document.getElementById('reportEquip').value;
+  return data.filter(s => {
+    if (filterService && s.service !== filterService) return false;
+    if (filterEquip   && s.equip   !== filterEquip)   return false;
+    return true;
+  });
+}
+
+let reportData = [];
+
+function openReportModal() {
+  reportData = [];
+  document.getElementById('reportModalOverlay').classList.add('open');
+  document.getElementById('reportResults').innerHTML = '';
+  document.getElementById('reportStats').innerHTML = '';
+  document.getElementById('btnInvoice').style.display = 'none';
+  document.getElementById('reportService').value = '';
+  document.getElementById('reportEquip').innerHTML = '<option value="">Tots els equips</option>';
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('reportDate').value = today;
+}
+
+function closeReportModal() {
+  document.getElementById('reportModalOverlay').classList.remove('open');
+}
+
+function handleReportOverlayClick(e) {
+  if (e.target === document.getElementById('reportModalOverlay')) closeReportModal();
+}
+
+async function runReport() {
+  const dateVal = document.getElementById('reportDate').value;
+  if (!dateVal) { showToast('Selecciona una data', 'error'); return; }
+
+  const res = await fetch(`/api/report/hardware?date=${dateVal}`);
+  const data = await res.json();
+
+  if (!res.ok) {
+    showToast(data.error || 'Error en la consulta', 'error');
+    return;
+  }
+
+  reportData = data;
+
+  const equips = [...new Set(data.map(s => s.equip).filter(Boolean))].sort();
+  const equipSel = document.getElementById('reportEquip');
+  const prevEquip = equipSel.value;
+  equipSel.innerHTML = '<option value="">Tots els equips</option>' +
+    equips.map(e => `<option value="${e}"${e === prevEquip ? ' selected' : ''}>${e}</option>`).join('');
+
+  applyReportFilters();
+}
+
+function applyReportFilters() {
+  const resultsEl = document.getElementById('reportResults');
+  const statsEl = document.getElementById('reportStats');
+  const btnInvoice = document.getElementById('btnInvoice');
+
+  if (!reportData.length) {
+    resultsEl.innerHTML = '<div class="empty-state" style="padding:2rem 0"><p>Cap servidor actiu en aquesta data</p></div>';
+    statsEl.innerHTML = '';
+    btnInvoice.style.display = 'none';
+    return;
+  }
+
+  const filtered = applyActiveFilters(reportData);
+
+  if (!filtered.length) {
+    resultsEl.innerHTML = '<div class="empty-state" style="padding:2rem 0"><p>Cap servidor coincideix amb els filtres</p></div>';
+    statsEl.innerHTML = '';
+    btnInvoice.style.display = 'none';
+    return;
+  }
+  btnInvoice.style.display = '';
+
+  let totalVcpus = 0, totalMem = 0, totalDisk = 0, noHw = 0;
+  filtered.forEach(s => {
+    if (s.vcpus == null) { noHw++; return; }
+    totalVcpus += s.vcpus || 0;
+    totalMem += s.memory || 0;
+    totalDisk += diskTotal(s);
+  });
+
+  const fmtNum = v => v == null ? '<span class="report-no-hw">—</span>' : v;
+
+  const rows = filtered.map(s => {
+    const disk = s.vcpus != null ? diskTotal(s) : null;
+    return `<tr>
+      <td>${s.name}</td>
+      <td>${s.service || '—'}</td>
+      <td>${s.running || '—'}</td>
+      <td>${s.equip || '—'}</td>
+      <td>${s.uses.length ? s.uses.join(', ') : '—'}</td>
+      <td class="num">${fmtNum(s.vcpus)}</td>
+      <td class="num">${fmtNum(s.memory)}</td>
+      <td class="num">${disk != null ? disk : '<span class="report-no-hw">—</span>'}</td>
+      <td>${s.hw_date ? fmtDate(s.hw_date) : '<span class="report-no-hw">sense hw</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  resultsEl.innerHTML = `
+    <div class="report-table-wrap">
+      <table>
+        <thead><tr>
+          <th>Nom</th><th>Service</th><th>Running</th><th>Equip</th><th>Usos</th>
+          <th class="num">vCPUs</th><th class="num">Mem (GB)</th>
+          <th class="num">Disc (GB)</th><th>Hw Data</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  statsEl.innerHTML = `
+    <span>${filtered.length} servidor${filtered.length !== 1 ? 's' : ''}</span>
+    <span>${totalVcpus} vCPUs</span>
+    <span>${totalMem} GB mem</span>
+    <span>${totalDisk} GB disc</span>
+    ${noHw ? `<span>${noHw} sense maquinari</span>` : ''}`;
+}
+
+// ── Invoice ───────────────────────────────────────────────────────────────────
+
+let invoiceData = [];
+
+async function openInvoiceModal() {
+  const dateVal = document.getElementById('reportDate').value;
+  document.getElementById('invoiceTitle').textContent = `Factura — ${fmtDate(dateVal)}`;
+  document.getElementById('invoiceModalOverlay').classList.add('open');
+  document.getElementById('invoiceResults').innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem">Carregant...</p>';
+  document.getElementById('invoiceGrandTotal').innerHTML = '';
+
+  const res = await fetch(`/api/report/invoice?date=${dateVal}`);
+  const data = await res.json();
+  if (!res.ok) { showToast(data.error || 'Error en la factura', 'error'); return; }
+
+  invoiceData = applyActiveFilters(data);
+
+  renderInvoice();
+}
+
+function closeInvoiceModal() {
+  document.getElementById('invoiceModalOverlay').classList.remove('open');
+}
+
+function handleInvoiceOverlayClick(e) {
+  if (e.target === document.getElementById('invoiceModalOverlay')) closeInvoiceModal();
+}
+
+function renderInvoice() {
+  const fmtC = v => v == null ? '<span class="invoice-no-price">—</span>' : v.toFixed(4);
+  const fmtP = v => v == null ? '' : `€${v.toFixed(4)}/u`;
+
+  const rows = invoiceData.map(s => {
+    const noPrice = s.total == null;
+    return `<tr>
+      <td>${s.name}</td>
+      <td>${s.service || '—'}</td>
+      <td>${s.equip || '—'}</td>
+      <td>
+        ${s.running || '<span class="invoice-no-price">sense running</span>'}
+        ${s.running && s.price_vcpu == null ? '<span class="invoice-price-hint">sense preu en aquesta data</span>' : ''}
+      </td>
+      <td class="num">${s.vcpus}<br><span class="invoice-price-hint">${fmtP(s.price_vcpu)}</span></td>
+      <td class="num">${fmtC(s.cost_vcpu)}</td>
+      <td class="num">${s.memory}<br><span class="invoice-price-hint">${fmtP(s.price_mem)}</span></td>
+      <td class="num">${fmtC(s.cost_mem)}</td>
+      <td class="num">${s.disk}<br><span class="invoice-price-hint">${fmtP(s.price_disk)}</span></td>
+      <td class="num">${fmtC(s.cost_disk)}</td>
+      <td class="num${noPrice ? '' : ' invoice-total-cell'}">${fmtC(s.total)}</td>
+    </tr>`;
+  }).join('');
+
+  const grandTotal = invoiceData.reduce((sum, s) => sum + (s.total || 0), 0);
+  const countPriced = invoiceData.filter(s => s.total != null).length;
+
+  document.getElementById('invoiceResults').innerHTML = `
+    <div class="report-table-wrap">
+      <table>
+        <thead><tr>
+          <th>Nom</th><th>Service</th><th>Equip</th><th>Running</th>
+          <th class="num">vCPUs</th><th class="num">Cost vCPU</th>
+          <th class="num">Mem (GB)</th><th class="num">Cost Mem</th>
+          <th class="num">Disc (GB)</th><th class="num">Cost Disc</th>
+          <th class="num">Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('invoiceGrandTotal').innerHTML = `
+    <span class="igt-label">Total factura</span>
+    <span class="igt-value">${grandTotal.toFixed(4)}</span>
+    ${countPriced < invoiceData.length
+      ? `<span class="igt-label">(${invoiceData.length - countPriced} servidor${invoiceData.length - countPriced !== 1 ? 's' : ''} sense preu)</span>`
+      : ''}`;
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────

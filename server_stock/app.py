@@ -346,12 +346,16 @@ def create_running_price(id):
     errors = validate_price(data)
     if errors:
         return jsonify({'errors': errors}), 400
+    new_start = parse_date(data['start_date'])
+    open_price = RunningPrice.query.filter_by(running_id=id, end_date=None).first()
+    if open_price:
+        open_price.end_date = new_start
     price = RunningPrice(
         running_id=id,
         price_vcpu=data.get('price_vcpu', 0),
         price_mem=data.get('price_mem', 0),
         price_disk=data.get('price_disk', 0),
-        start_date=parse_date(data['start_date']),
+        start_date=new_start,
         end_date=parse_date(data.get('end_date')),
     )
     db.session.add(price)
@@ -488,6 +492,82 @@ def get_server_history(id):
     return jsonify([r.to_dict() for r in records])
 
 
+def _validate_hw_fields(data):
+    errors = {}
+    for field in INT_FIELDS:
+        if field not in data:
+            continue
+        try:
+            v = int(data[field])
+            if v < 0:
+                errors[field] = 'Ha de ser >= 0'
+        except (TypeError, ValueError):
+            errors[field] = 'Ha de ser un enter'
+    return errors or None
+
+
+@app.route('/api/servers/<int:id>/history', methods=['POST'])
+def add_server_history(id):
+    Server.query.get_or_404(id)
+    data = request.get_json() or {}
+    date_str = data.get('data_modificacio')
+    if not date_str:
+        return jsonify({'error': 'data_modificacio is required'}), 400
+    snap_date = parse_date(date_str)
+    if not snap_date:
+        return jsonify({'error': 'Invalid date format (expected yyyy-mm-dd)'}), 400
+    errs = _validate_hw_fields(data)
+    if errs:
+        return jsonify({'errors': errs}), 400
+    hw_data = {f: int(data.get(f, 0)) for f in ('vcpus', 'memory', 'disk0', 'disk1', 'disk_extra')}
+    upsert_hardware(id, hw_data, snap_date)
+    db.session.commit()
+    row = ServerHardware.query.filter_by(server_id=id, data_modificacio=snap_date).one()
+    return jsonify(row.to_dict()), 201
+
+
+@app.route('/api/servers/<int:id>/history/<date_str>', methods=['PUT'])
+def update_server_history(id, date_str):
+    Server.query.get_or_404(id)
+    snap_date = parse_date(date_str)
+    if not snap_date:
+        return jsonify({'error': 'Invalid date in URL'}), 400
+    row = ServerHardware.query.filter_by(server_id=id, data_modificacio=snap_date).first_or_404()
+    data = request.get_json() or {}
+    errs = _validate_hw_fields(data)
+    if errs:
+        return jsonify({'errors': errs}), 400
+
+    new_date_str = data.get('data_modificacio')
+    new_date = parse_date(new_date_str) if new_date_str else snap_date
+
+    hw_data = {f: int(data[f]) if f in data else getattr(row, f) for f in INT_FIELDS}
+
+    if new_date != snap_date:
+        db.session.delete(row)
+        db.session.flush()
+        upsert_hardware(id, hw_data, new_date)
+    else:
+        for k, v in hw_data.items():
+            setattr(row, k, v)
+
+    db.session.commit()
+    updated = ServerHardware.query.filter_by(server_id=id, data_modificacio=new_date).one()
+    return jsonify(updated.to_dict())
+
+
+@app.route('/api/servers/<int:id>/history/<date_str>', methods=['DELETE'])
+def delete_server_history(id, date_str):
+    Server.query.get_or_404(id)
+    snap_date = parse_date(date_str)
+    if not snap_date:
+        return jsonify({'error': 'Invalid date in URL'}), 400
+    row = ServerHardware.query.filter_by(server_id=id, data_modificacio=snap_date).first_or_404()
+    db.session.delete(row)
+    db.session.commit()
+    return jsonify({'message': 'Deleted'})
+
+
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     server_count = db.session.query(func.count(Server.id)).scalar()
@@ -514,6 +594,134 @@ def get_stats():
         'total_memory_gb': row.total_memory_gb or 0,
         'total_disk_gb': row.total_disk_gb or 0,
     })
+
+
+def _active_servers_with_hw(report_date):
+    servers = Server.query.filter(
+        Server.data_alta <= report_date,
+        or_(Server.data_baixa.is_(None), Server.data_baixa > report_date),
+    ).order_by(Server.name).all()
+
+    if not servers:
+        return servers, {}
+
+    latest_subq = (
+        db.session.query(
+            ServerHardware.server_id,
+            func.max(ServerHardware.data_modificacio).label('max_date'),
+        )
+        .filter(
+            ServerHardware.server_id.in_([s.id for s in servers]),
+            ServerHardware.data_modificacio <= report_date,
+        )
+        .group_by(ServerHardware.server_id)
+        .subquery()
+    )
+    hw_rows = (
+        db.session.query(ServerHardware)
+        .join(latest_subq,
+              (ServerHardware.server_id == latest_subq.c.server_id) &
+              (ServerHardware.data_modificacio == latest_subq.c.max_date))
+        .all()
+    )
+    return servers, {hw.server_id: hw for hw in hw_rows}
+
+
+@app.route('/api/report/hardware', methods=['GET'])
+def hardware_report():
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({'error': 'date parameter required'}), 400
+    report_date = parse_date(date_str)
+    if not report_date:
+        return jsonify({'error': 'Invalid date format (expected yyyy-mm-dd)'}), 400
+
+    servers, hw_map = _active_servers_with_hw(report_date)
+    result = []
+    for s in servers:
+        hw = hw_map.get(s.id)
+        result.append({
+            'id': s.id, 'name': s.name, 'service': s.service, 'equip': s.equip,
+            'running': s.running.name if s.running else None,
+            'data_alta': fmt_date(s.data_alta), 'data_baixa': fmt_date(s.data_baixa),
+            'uses': [u.name for u in s.uses],
+            'vcpus': hw.vcpus if hw else None,
+            'memory': hw.memory if hw else None,
+            'disk0': hw.disk0 if hw else None,
+            'disk1': hw.disk1 if hw else None,
+            'disk_extra': hw.disk_extra if hw else None,
+            'hw_date': fmt_date(hw.data_modificacio) if hw else None,
+        })
+    return jsonify(result)
+
+
+@app.route('/api/report/invoice', methods=['GET'])
+def invoice_report():
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({'error': 'date parameter required'}), 400
+    report_date = parse_date(date_str)
+    if not report_date:
+        return jsonify({'error': 'Invalid date format (expected yyyy-mm-dd)'}), 400
+
+    servers, hw_map = _active_servers_with_hw(report_date)
+
+    running_ids = list({s.running_id for s in servers if s.running_id})
+    price_map = {}
+    if running_ids:
+        latest_price_subq = (
+            db.session.query(
+                RunningPrice.running_id,
+                func.max(RunningPrice.start_date).label('max_start'),
+            )
+            .filter(
+                RunningPrice.running_id.in_(running_ids),
+                RunningPrice.start_date <= report_date,
+                or_(RunningPrice.end_date.is_(None), RunningPrice.end_date > report_date),
+            )
+            .group_by(RunningPrice.running_id)
+            .subquery()
+        )
+        price_rows = (
+            db.session.query(RunningPrice)
+            .join(latest_price_subq,
+                  (RunningPrice.running_id == latest_price_subq.c.running_id) &
+                  (RunningPrice.start_date == latest_price_subq.c.max_start))
+            .all()
+        )
+        price_map = {p.running_id: p for p in price_rows}
+
+    result = []
+    for s in servers:
+        hw = hw_map.get(s.id)
+        vcpus  = hw.vcpus  if hw else 0
+        memory = hw.memory if hw else 0
+        disk   = ((hw.disk0 or 0) + (hw.disk1 or 0) + (hw.disk_extra or 0)) if hw else 0
+
+        price = price_map.get(s.running_id) if s.running_id else None
+
+        if price:
+            pv = float(price.price_vcpu)
+            pm = float(price.price_mem)
+            pd = float(price.price_disk)
+            cost_vcpu = round(pv * vcpus,  4)
+            cost_mem  = round(pm * memory, 4)
+            cost_disk = round(pd * disk,   4)
+            total     = round(cost_vcpu + cost_mem + cost_disk, 4)
+        else:
+            pv = pm = pd = None
+            cost_vcpu = cost_mem = cost_disk = total = None
+
+        result.append({
+            'id': s.id, 'name': s.name, 'service': s.service, 'equip': s.equip,
+            'running': s.running.name if s.running else None,
+            'vcpus': vcpus, 'memory': memory, 'disk': disk,
+            'price_vcpu': pv, 'price_mem': pm, 'price_disk': pd,
+            'cost_vcpu': cost_vcpu, 'cost_mem': cost_mem, 'cost_disk': cost_disk,
+            'total': total,
+        })
+
+    return jsonify(result)
 
 
 # ─── Frontend ─────────────────────────────────────────────────────────────────
