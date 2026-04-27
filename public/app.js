@@ -2,7 +2,8 @@
 
 let allServers = [];
 let allUses = [];
-let allRunning = [];
+let allTeams = [];
+let allEnvironments = [];
 let editingId = null;
 let sortState = { key: null, dir: 1 };
 
@@ -20,9 +21,14 @@ async function loadUses() {
   allUses = await res.json();
 }
 
-async function loadRunning() {
-  const res = await fetch('/api/running');
-  allRunning = await res.json();
+async function loadTeams() {
+  const res = await fetch('/api/teams');
+  allTeams = await res.json();
+}
+
+async function loadEnvironments() {
+  const res = await fetch('/api/environments');
+  allEnvironments = await res.json();
 }
 
 async function loadStats() {
@@ -58,8 +64,8 @@ function renderTable(servers) {
     const usesBadges = s.uses && s.uses.length
       ? `<div class="uses-cell">${s.uses.map(u => `<span class="badge badge-use">${u.name}</span>`).join('')}</div>`
       : '<span style="color:var(--text-muted)">—</span>';
-    const runningBadge = s.running
-      ? `<span class="badge badge-running${s.running.delete_date ? ' retired' : ''}">${s.running.name}</span>`
+    const environmentBadge = s.environment
+      ? `<span class="badge badge-running${s.environment.delete_date ? ' retired' : ''}">${s.environment.name}</span>`
       : '<span style="color:var(--text-muted)">—</span>';
     return `
     <tr>
@@ -71,9 +77,9 @@ function renderTable(servers) {
       <td class="cell-num ${s.disk_extra === 0 ? 'zero' : ''}">${s.disk_extra || '—'}</td>
       <td class="cell-num"><strong>${total}</strong></td>
       <td>${s.service ? `<span class="badge badge-service">${s.service}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-      <td>${runningBadge}</td>
+      <td>${environmentBadge}</td>
       <td>${usesBadges}</td>
-      <td>${s.equip ? `<span class="badge badge-equip">${s.equip}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td>${s.team ? `<span class="badge badge-equip">${s.team.name}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
       <td style="font-family:var(--mono);font-size:0.8rem;color:var(--text-muted)">${fmtDate(s.data_alta)}</td>
       <td style="font-family:var(--mono);font-size:0.8rem;color:${s.data_baixa ? 'var(--yellow)' : 'var(--text-muted)'}">${fmtDate(s.data_baixa)}</td>
       <td>
@@ -94,8 +100,8 @@ function filterAndRender() {
   let list = allServers.filter(s =>
     s.name.toLowerCase().includes(q) ||
     (s.service || '').toLowerCase().includes(q) ||
-    (s.equip || '').toLowerCase().includes(q) ||
-    (s.running?.name || '').toLowerCase().includes(q) ||
+    (s.team?.name || '').toLowerCase().includes(q) ||
+    (s.environment?.name || '').toLowerCase().includes(q) ||
     (s.uses || []).some(u => u.name.toLowerCase().includes(q))
   );
 
@@ -149,7 +155,7 @@ function updateSortHeaders() {
 // ── Server form ───────────────────────────────────────────────────────────────
 
 const FIELD_IDS = {
-  name: 'f_name', service: 'f_service', equip: 'f_equip',
+  name: 'f_name', service: 'f_service',
   vcpus: 'f_vcpus', memory: 'f_memory',
   disk0: 'f_disk0', disk1: 'f_disk1', disk_extra: 'f_disk_extra',
   data_alta: 'f_data_alta', data_baixa: 'f_data_baixa',
@@ -180,10 +186,17 @@ function showFieldErrors(errors) {
   if (firstErr) document.getElementById(firstErr)?.focus();
 }
 
-function populateRunningSelect(selectedId) {
-  const sel = document.getElementById('f_running_id');
+function populateTeamSelect(selectedId) {
+  const sel = document.getElementById('f_team_id');
   sel.innerHTML = '<option value="">— No definit —</option>' +
-    allRunning.map(r => {
+    allTeams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  sel.value = selectedId || '';
+}
+
+function populateEnvironmentSelect(selectedId) {
+  const sel = document.getElementById('f_environment_id');
+  sel.innerHTML = '<option value="">— No definit —</option>' +
+    allEnvironments.map(r => {
       const label = r.delete_date ? `${r.name} [retirat]` : r.name;
       return `<option value="${r.id}">${label}</option>`;
     }).join('');
@@ -228,7 +241,6 @@ function openModal(server = null) {
   document.getElementById('modalTitle').textContent = server ? `Editar: ${server.name}` : 'Nou Servidor';
   document.getElementById('f_name').value = server?.name || '';
   document.getElementById('f_service').value = server?.service || '';
-  document.getElementById('f_equip').value = server?.equip || '';
   document.getElementById('f_data_alta').value = server?.data_alta || '';
   document.getElementById('f_data_baixa').value = server?.data_baixa || '';
   document.getElementById('f_vcpus').value = server?.vcpus || '';
@@ -236,7 +248,8 @@ function openModal(server = null) {
   document.getElementById('f_disk0').value = server?.disk0 || '';
   document.getElementById('f_disk1').value = server?.disk1 || '';
   document.getElementById('f_disk_extra').value = server?.disk_extra || '';
-  populateRunningSelect(server?.running?.id || null);
+  populateTeamSelect(server?.team?.id || null);
+  populateEnvironmentSelect(server?.environment?.id || null);
   renderUsesChecklist(server ? (server.uses || []).map(u => u.id) : []);
   document.getElementById('modalOverlay').classList.add('open');
   setTimeout(() => document.getElementById('f_name').focus(), 100);
@@ -256,18 +269,18 @@ async function saveServer() {
   clearFieldErrors();
 
   const payload = {
-    name:       document.getElementById('f_name').value.trim(),
-    service:    document.getElementById('f_service').value,
-    equip:      document.getElementById('f_equip').value.trim(),
-    data_alta:  document.getElementById('f_data_alta').value || null,
-    data_baixa: document.getElementById('f_data_baixa').value || null,
-    running_id: parseInt(document.getElementById('f_running_id').value) || null,
-    vcpus:      parseInt(document.getElementById('f_vcpus').value) || 0,
-    memory:     parseInt(document.getElementById('f_memory').value) || 0,
-    disk0:      parseInt(document.getElementById('f_disk0').value) || 0,
-    disk1:      parseInt(document.getElementById('f_disk1').value) || 0,
-    disk_extra: parseInt(document.getElementById('f_disk_extra').value) || 0,
-    use_ids:    getSelectedUseIds(),
+    name:           document.getElementById('f_name').value.trim(),
+    service:        document.getElementById('f_service').value,
+    team_id:        parseInt(document.getElementById('f_team_id').value) || null,
+    data_alta:      document.getElementById('f_data_alta').value || null,
+    data_baixa:     document.getElementById('f_data_baixa').value || null,
+    environment_id: parseInt(document.getElementById('f_environment_id').value) || null,
+    vcpus:          parseInt(document.getElementById('f_vcpus').value) || 0,
+    memory:         parseInt(document.getElementById('f_memory').value) || 0,
+    disk0:          parseInt(document.getElementById('f_disk0').value) || 0,
+    disk1:          parseInt(document.getElementById('f_disk1').value) || 0,
+    disk_extra:     parseInt(document.getElementById('f_disk_extra').value) || 0,
+    use_ids:        getSelectedUseIds(),
   };
 
   const url = editingId ? `/api/servers/${editingId}` : '/api/servers';
@@ -369,103 +382,202 @@ async function deleteUseItem(id, name) {
   }
 }
 
-// ── Running management ────────────────────────────────────────────────────────
+// ── Teams management ──────────────────────────────────────────────────────────
 
-let editingRunningId = null;
-let expandedRunningId = null;
-let editingPriceId = null;
-const runningPricesCache = {};
+let editingTeamId = null;
 
-function openRunningModal() {
-  expandedRunningId = null;
-  editingPriceId = null;
-  cancelRunningEdit();
-  document.getElementById('runningModalOverlay').classList.add('open');
-  setTimeout(() => document.getElementById('newRunningName').focus(), 100);
+function openTeamsModal() {
+  editingTeamId = null;
+  renderTeamsManager();
+  document.getElementById('teamsModalOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('newTeamName').focus(), 100);
 }
 
-function closeRunningModal() {
-  expandedRunningId = null;
-  editingPriceId = null;
-  cancelRunningEdit();
-  document.getElementById('runningModalOverlay').classList.remove('open');
+function closeTeamsModal() {
+  editingTeamId = null;
+  document.getElementById('teamsModalOverlay').classList.remove('open');
+  document.getElementById('newTeamName').value = '';
 }
 
-function handleRunningOverlayClick(e) {
-  if (e.target === document.getElementById('runningModalOverlay')) closeRunningModal();
+function handleTeamsOverlayClick(e) {
+  if (e.target === document.getElementById('teamsModalOverlay')) closeTeamsModal();
 }
 
-function renderRunningManager() {
-  const list = document.getElementById('runningManagerList');
-  if (!allRunning.length) {
-    list.innerHTML = `<p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-muted);text-align:center;padding:1rem">Cap running definit.</p>`;
+function renderTeamsManager() {
+  const list = document.getElementById('teamsManagerList');
+  if (!allTeams.length) {
+    list.innerHTML = `<p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-muted);text-align:center;padding:1rem">Cap team definit.</p>`;
     return;
   }
-  list.innerHTML = allRunning.map(r => {
+  list.innerHTML = allTeams.map(t => `
+    <div class="use-manager-row">
+      <span>${t.name}</span>
+      <div style="display:flex;gap:0.4rem">
+        <button class="use-del-btn" onclick="editTeamItem(${t.id}, '${t.name.replace(/'/g, "\\'")}')" title="Editar" style="background:var(--accent)">✎</button>
+        <button class="use-del-btn" onclick="deleteTeamItem(${t.id}, '${t.name.replace(/'/g, "\\'")}')" title="Eliminar">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function editTeamItem(id, name) {
+  editingTeamId = id;
+  document.getElementById('newTeamName').value = name;
+  document.getElementById('btnSaveTeam').textContent = '✓ Actualitzar';
+  document.getElementById('btnCancelTeam').style.display = '';
+  document.getElementById('newTeamName').focus();
+}
+
+function cancelTeamEdit() {
+  editingTeamId = null;
+  document.getElementById('newTeamName').value = '';
+  document.getElementById('btnSaveTeam').textContent = '+ Afegir';
+  document.getElementById('btnCancelTeam').style.display = 'none';
+}
+
+async function saveTeam() {
+  const input = document.getElementById('newTeamName');
+  const name = input.value.trim();
+  if (!name) return;
+
+  if (editingTeamId) {
+    const res = await fetch(`/api/teams/${editingTeamId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.errors?.name || 'Error en actualitzar', 'error'); return; }
+    cancelTeamEdit();
+    await loadTeams();
+    renderTeamsManager();
+    await loadServers();
+    showToast(`"${name}" actualitzat ✓`, 'success');
+  } else {
+    const res = await fetch('/api/teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.errors?.name || 'Error en crear', 'error'); return; }
+    input.value = '';
+    await loadTeams();
+    renderTeamsManager();
+    showToast(`"${name}" afegit ✓`, 'success');
+  }
+}
+
+async function deleteTeamItem(id, name) {
+  if (!confirm(`Eliminar el team "${name}"? Els servidors que l'usin quedaran sense team assignat.`)) return;
+  const res = await fetch(`/api/teams/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    if (editingTeamId === id) cancelTeamEdit();
+    await loadTeams();
+    renderTeamsManager();
+    await loadServers();
+    showToast(`"${name}" eliminat`, 'success');
+  } else {
+    showToast('Error en eliminar', 'error');
+  }
+}
+
+// ── Environments management ───────────────────────────────────────────────────
+
+let editingEnvironmentId = null;
+let expandedEnvironmentId = null;
+let editingPriceId = null;
+const environmentPricesCache = {};
+
+function openEnvironmentsModal() {
+  expandedEnvironmentId = null;
+  editingPriceId = null;
+  cancelEnvironmentEdit();
+  document.getElementById('environmentsModalOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('newEnvironmentName').focus(), 100);
+}
+
+function closeEnvironmentsModal() {
+  expandedEnvironmentId = null;
+  editingPriceId = null;
+  cancelEnvironmentEdit();
+  document.getElementById('environmentsModalOverlay').classList.remove('open');
+}
+
+function handleEnvironmentsOverlayClick(e) {
+  if (e.target === document.getElementById('environmentsModalOverlay')) closeEnvironmentsModal();
+}
+
+function renderEnvironmentsManager() {
+  const list = document.getElementById('environmentsManagerList');
+  if (!allEnvironments.length) {
+    list.innerHTML = `<p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-muted);text-align:center;padding:1rem">Cap entorn definit.</p>`;
+    return;
+  }
+  list.innerHTML = allEnvironments.map(r => {
     const retired = !!r.delete_date;
-    const isEditing = editingRunningId === r.id;
-    const isExpanded = expandedRunningId === r.id;
+    const isEditing = editingEnvironmentId === r.id;
+    const isExpanded = expandedEnvironmentId === r.id;
     return `
     <div class="running-manager-entry">
       <div class="running-manager-row ${retired ? 'retired' : ''} ${isEditing ? 'editing' : ''} ${isExpanded ? 'has-panel' : ''}">
         <span class="r-name">${r.name}</span>
         <span class="r-date">Creació: ${fmtDate(r.create_date)}</span>
         <span class="r-date">${r.delete_date ? `Baixa: ${fmtDate(r.delete_date)}` : '<span style="color:var(--green)">Actiu</span>'}</span>
-        <button class="r-prices-btn${isExpanded ? ' active' : ''}" onclick="toggleRunningPrices(${r.id})">Preus ${isExpanded ? '▴' : '▾'}</button>
-        <button class="r-edit-btn" onclick="editRunningItem(${r.id})" title="Editar">✎</button>
-        <button class="r-del-btn" onclick="deleteRunningItem(${r.id}, '${r.name}')" title="Eliminar">✕</button>
+        <button class="r-prices-btn${isExpanded ? ' active' : ''}" onclick="toggleEnvironmentPrices(${r.id})">Preus ${isExpanded ? '▴' : '▾'}</button>
+        <button class="r-edit-btn" onclick="editEnvironmentItem(${r.id})" title="Editar">✎</button>
+        <button class="r-del-btn" onclick="deleteEnvironmentItem(${r.id}, '${r.name}')" title="Eliminar">✕</button>
       </div>
       ${isExpanded ? `<div class="running-prices-panel" id="prices-panel-${r.id}"><p style="font-family:var(--mono);font-size:0.75rem;color:var(--text-muted);padding:0.4rem">Carregant...</p></div>` : ''}
     </div>`;
   }).join('');
 
-  if (expandedRunningId !== null && runningPricesCache[expandedRunningId] !== undefined) {
-    renderRunningPricesPanel(expandedRunningId);
+  if (expandedEnvironmentId !== null && environmentPricesCache[expandedEnvironmentId] !== undefined) {
+    renderEnvironmentPricesPanel(expandedEnvironmentId);
   }
 }
 
-function editRunningItem(id) {
-  const r = allRunning.find(r => r.id === id);
+function editEnvironmentItem(id) {
+  const r = allEnvironments.find(r => r.id === id);
   if (!r) return;
-  editingRunningId = id;
-  document.getElementById('newRunningName').value = r.name;
-  document.getElementById('newRunningCreate').value = r.create_date || '';
-  document.getElementById('newRunningDelete').value = r.delete_date || '';
-  document.getElementById('btnSaveRunning').textContent = '✓ Actualitzar';
-  document.getElementById('btnCancelRunning').style.display = '';
-  renderRunningManager();
-  document.getElementById('newRunningName').focus();
+  editingEnvironmentId = id;
+  document.getElementById('newEnvironmentName').value = r.name;
+  document.getElementById('newEnvironmentCreate').value = r.create_date || '';
+  document.getElementById('newEnvironmentDelete').value = r.delete_date || '';
+  document.getElementById('btnSaveEnvironment').textContent = '✓ Actualitzar';
+  document.getElementById('btnCancelEnvironment').style.display = '';
+  renderEnvironmentsManager();
+  document.getElementById('newEnvironmentName').focus();
 }
 
-function cancelRunningEdit() {
-  editingRunningId = null;
-  const nameEl    = document.getElementById('newRunningName');
-  const createEl  = document.getElementById('newRunningCreate');
-  const deleteEl  = document.getElementById('newRunningDelete');
-  const saveBtn   = document.getElementById('btnSaveRunning');
-  const cancelBtn = document.getElementById('btnCancelRunning');
+function cancelEnvironmentEdit() {
+  editingEnvironmentId = null;
+  const nameEl    = document.getElementById('newEnvironmentName');
+  const createEl  = document.getElementById('newEnvironmentCreate');
+  const deleteEl  = document.getElementById('newEnvironmentDelete');
+  const saveBtn   = document.getElementById('btnSaveEnvironment');
+  const cancelBtn = document.getElementById('btnCancelEnvironment');
   if (nameEl)    nameEl.value = '';
   if (createEl)  createEl.value = new Date().toISOString().slice(0, 10);
   if (deleteEl)  deleteEl.value = '';
   if (saveBtn)   saveBtn.textContent = '+ Afegir';
   if (cancelBtn) cancelBtn.style.display = 'none';
-  renderRunningManager();
+  renderEnvironmentsManager();
 }
 
-async function saveRunning() {
-  if (editingRunningId) {
-    await updateRunningEntry();
+async function saveEnvironment() {
+  if (editingEnvironmentId) {
+    await updateEnvironmentEntry();
   } else {
-    await createRunning();
+    await createEnvironment();
   }
 }
 
-async function createRunning() {
-  const name = document.getElementById('newRunningName').value.trim();
+async function createEnvironment() {
+  const name = document.getElementById('newEnvironmentName').value.trim();
   if (!name) return;
-  const create_date = document.getElementById('newRunningCreate').value || null;
-  const delete_date = document.getElementById('newRunningDelete').value || null;
-  const res = await fetch('/api/running', {
+  const create_date = document.getElementById('newEnvironmentCreate').value || null;
+  const delete_date = document.getElementById('newEnvironmentDelete').value || null;
+  const res = await fetch('/api/environments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, create_date, delete_date }),
@@ -475,19 +587,19 @@ async function createRunning() {
     showToast(data.errors?.name || 'Error en crear', 'error');
     return;
   }
-  cancelRunningEdit();
-  await loadRunning();
-  renderRunningManager();
+  cancelEnvironmentEdit();
+  await loadEnvironments();
+  renderEnvironmentsManager();
   showToast(`"${name}" afegit ✓`, 'success');
 }
 
-async function updateRunningEntry() {
-  const name = document.getElementById('newRunningName').value.trim();
+async function updateEnvironmentEntry() {
+  const name = document.getElementById('newEnvironmentName').value.trim();
   if (!name) return;
-  const create_date = document.getElementById('newRunningCreate').value || null;
-  const delete_date = document.getElementById('newRunningDelete').value || null;
-  const id = editingRunningId;
-  const res = await fetch(`/api/running/${id}`, {
+  const create_date = document.getElementById('newEnvironmentCreate').value || null;
+  const delete_date = document.getElementById('newEnvironmentDelete').value || null;
+  const id = editingEnvironmentId;
+  const res = await fetch(`/api/environments/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, create_date, delete_date }),
@@ -497,22 +609,22 @@ async function updateRunningEntry() {
     showToast(data.errors?.name || 'Error en actualitzar', 'error');
     return;
   }
-  cancelRunningEdit();
-  await loadRunning();
-  renderRunningManager();
+  cancelEnvironmentEdit();
+  await loadEnvironments();
+  renderEnvironmentsManager();
   await loadServers();
   showToast(`"${name}" actualitzat ✓`, 'success');
 }
 
-async function deleteRunningItem(id, name) {
-  if (!confirm(`Eliminar el running "${name}"? Els servidors que l'usin quedaran sense running assignat.`)) return;
-  const res = await fetch(`/api/running/${id}`, { method: 'DELETE' });
+async function deleteEnvironmentItem(id, name) {
+  if (!confirm(`Eliminar l'entorn "${name}"? Els servidors que l'usin quedaran sense entorn assignat.`)) return;
+  const res = await fetch(`/api/environments/${id}`, { method: 'DELETE' });
   if (res.ok) {
-    if (editingRunningId === id) cancelRunningEdit();
-    if (expandedRunningId === id) { expandedRunningId = null; editingPriceId = null; }
-    delete runningPricesCache[id];
-    await loadRunning();
-    renderRunningManager();
+    if (editingEnvironmentId === id) cancelEnvironmentEdit();
+    if (expandedEnvironmentId === id) { expandedEnvironmentId = null; editingPriceId = null; }
+    delete environmentPricesCache[id];
+    await loadEnvironments();
+    renderEnvironmentsManager();
     await loadServers();
     showToast(`"${name}" eliminat`, 'success');
   } else {
@@ -520,25 +632,25 @@ async function deleteRunningItem(id, name) {
   }
 }
 
-// ── Running price management ──────────────────────────────────────────────────
+// ── Environment price management ──────────────────────────────────────────────
 
-async function toggleRunningPrices(id) {
-  if (expandedRunningId === id) {
-    expandedRunningId = null;
+async function toggleEnvironmentPrices(id) {
+  if (expandedEnvironmentId === id) {
+    expandedEnvironmentId = null;
     editingPriceId = null;
-    renderRunningManager();
+    renderEnvironmentsManager();
     return;
   }
-  expandedRunningId = id;
+  expandedEnvironmentId = id;
   editingPriceId = null;
-  renderRunningManager();
-  await refreshRunningPrices(id);
+  renderEnvironmentsManager();
+  await refreshEnvironmentPrices(id);
 }
 
-async function refreshRunningPrices(runningId) {
-  const res = await fetch(`/api/running/${runningId}/prices`);
-  runningPricesCache[runningId] = await res.json();
-  renderRunningPricesPanel(runningId);
+async function refreshEnvironmentPrices(environmentId) {
+  const res = await fetch(`/api/environments/${environmentId}/prices`);
+  environmentPricesCache[environmentId] = await res.json();
+  renderEnvironmentPricesPanel(environmentId);
 }
 
 function fmtPrice(val) {
@@ -546,10 +658,10 @@ function fmtPrice(val) {
   return isNaN(n) ? '0.0000' : n.toFixed(4);
 }
 
-function renderRunningPricesPanel(runningId) {
-  const panel = document.getElementById(`prices-panel-${runningId}`);
+function renderEnvironmentPricesPanel(environmentId) {
+  const panel = document.getElementById(`prices-panel-${environmentId}`);
   if (!panel) return;
-  const prices = runningPricesCache[runningId] || [];
+  const prices = environmentPricesCache[environmentId] || [];
 
   const headers = ['€/vCPU', '€/GB Mem', '€/GB Disk', 'Inici', 'Fi', ''].map(h =>
     `<span class="price-header-cell">${h}</span>`).join('');
@@ -563,8 +675,8 @@ function renderRunningPricesPanel(runningId) {
         <input type="date" id="ep_start_${p.id}" value="${p.start_date || ''}">
         <input type="date" id="ep_end_${p.id}" value="${p.end_date || ''}">
         <div class="price-actions">
-          <button class="save" onclick="savePriceRow(${runningId}, ${p.id})" title="Guardar">✓</button>
-          <button class="del" onclick="cancelPriceEdit(${runningId})" title="Cancel·lar">✕</button>
+          <button class="save" onclick="savePriceRow(${environmentId}, ${p.id})" title="Guardar">✓</button>
+          <button class="del" onclick="cancelPriceEdit(${environmentId})" title="Cancel·lar">✕</button>
         </div>`;
     }
     const endSpan = p.end_date
@@ -577,8 +689,8 @@ function renderRunningPricesPanel(runningId) {
       <span class="price-cell">${fmtDate(p.start_date)}</span>
       ${endSpan}
       <div class="price-actions">
-        <button class="edit" onclick="editPriceRow(${runningId}, ${p.id})" title="Editar">✎</button>
-        <button class="del" onclick="deletePriceRow(${runningId}, ${p.id})" title="Eliminar">✕</button>
+        <button class="edit" onclick="editPriceRow(${environmentId}, ${p.id})" title="Editar">✎</button>
+        <button class="del" onclick="deletePriceRow(${environmentId}, ${p.id})" title="Eliminar">✕</button>
       </div>`;
   }).join('');
 
@@ -589,26 +701,26 @@ function renderRunningPricesPanel(runningId) {
       ${headers}
       ${priceRows}
       ${separator}
-      <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_vcpu_${runningId}">
-      <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_mem_${runningId}">
-      <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_disk_${runningId}">
-      <input type="date" id="np_start_${runningId}">
-      <input type="date" id="np_end_${runningId}">
-      <button class="price-add-btn" onclick="createRunningPrice(${runningId})">+</button>
+      <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_vcpu_${environmentId}">
+      <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_mem_${environmentId}">
+      <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_disk_${environmentId}">
+      <input type="date" id="np_start_${environmentId}">
+      <input type="date" id="np_end_${environmentId}">
+      <button class="price-add-btn" onclick="createEnvironmentPrice(${environmentId})">+</button>
     </div>`;
 }
 
-function editPriceRow(runningId, priceId) {
+function editPriceRow(environmentId, priceId) {
   editingPriceId = priceId;
-  renderRunningPricesPanel(runningId);
+  renderEnvironmentPricesPanel(environmentId);
 }
 
-function cancelPriceEdit(runningId) {
+function cancelPriceEdit(environmentId) {
   editingPriceId = null;
-  renderRunningPricesPanel(runningId);
+  renderEnvironmentPricesPanel(environmentId);
 }
 
-async function savePriceRow(runningId, priceId) {
+async function savePriceRow(environmentId, priceId) {
   const payload = {
     price_vcpu: parseFloat(document.getElementById(`ep_vcpu_${priceId}`).value) || 0,
     price_mem:  parseFloat(document.getElementById(`ep_mem_${priceId}`).value) || 0,
@@ -616,7 +728,7 @@ async function savePriceRow(runningId, priceId) {
     start_date: document.getElementById(`ep_start_${priceId}`).value || null,
     end_date:   document.getElementById(`ep_end_${priceId}`).value || null,
   };
-  const res = await fetch(`/api/running/${runningId}/prices/${priceId}`, {
+  const res = await fetch(`/api/environments/${environmentId}/prices/${priceId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -627,19 +739,19 @@ async function savePriceRow(runningId, priceId) {
     return;
   }
   editingPriceId = null;
-  await refreshRunningPrices(runningId);
+  await refreshEnvironmentPrices(environmentId);
   showToast('Preu actualitzat ✓', 'success');
 }
 
-async function createRunningPrice(runningId) {
+async function createEnvironmentPrice(environmentId) {
   const payload = {
-    price_vcpu: parseFloat(document.getElementById(`np_vcpu_${runningId}`).value) || 0,
-    price_mem:  parseFloat(document.getElementById(`np_mem_${runningId}`).value) || 0,
-    price_disk: parseFloat(document.getElementById(`np_disk_${runningId}`).value) || 0,
-    start_date: document.getElementById(`np_start_${runningId}`).value || null,
-    end_date:   document.getElementById(`np_end_${runningId}`).value || null,
+    price_vcpu: parseFloat(document.getElementById(`np_vcpu_${environmentId}`).value) || 0,
+    price_mem:  parseFloat(document.getElementById(`np_mem_${environmentId}`).value) || 0,
+    price_disk: parseFloat(document.getElementById(`np_disk_${environmentId}`).value) || 0,
+    start_date: document.getElementById(`np_start_${environmentId}`).value || null,
+    end_date:   document.getElementById(`np_end_${environmentId}`).value || null,
   };
-  const res = await fetch(`/api/running/${runningId}/prices`, {
+  const res = await fetch(`/api/environments/${environmentId}/prices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -649,16 +761,16 @@ async function createRunningPrice(runningId) {
     showToast(Object.values(d.errors || {})[0] || 'Error en crear preu', 'error');
     return;
   }
-  await refreshRunningPrices(runningId);
+  await refreshEnvironmentPrices(environmentId);
   showToast('Preu afegit ✓', 'success');
 }
 
-async function deletePriceRow(runningId, priceId) {
+async function deletePriceRow(environmentId, priceId) {
   if (!confirm('Eliminar aquest preu?')) return;
-  const res = await fetch(`/api/running/${runningId}/prices/${priceId}`, { method: 'DELETE' });
+  const res = await fetch(`/api/environments/${environmentId}/prices/${priceId}`, { method: 'DELETE' });
   if (res.ok) {
     if (editingPriceId === priceId) editingPriceId = null;
-    await refreshRunningPrices(runningId);
+    await refreshEnvironmentPrices(environmentId);
     showToast('Preu eliminat', 'success');
   } else {
     showToast('Error en eliminar', 'error');
@@ -819,10 +931,10 @@ async function deleteHwRow(date) {
 
 function applyActiveFilters(data) {
   const filterService = document.getElementById('reportService').value;
-  const filterEquip   = document.getElementById('reportEquip').value;
+  const filterTeam    = document.getElementById('reportTeam').value;
   return data.filter(s => {
     if (filterService && s.service !== filterService) return false;
-    if (filterEquip   && s.equip   !== filterEquip)   return false;
+    if (filterTeam    && s.team    !== filterTeam)    return false;
     return true;
   });
 }
@@ -836,7 +948,7 @@ function openReportModal() {
   document.getElementById('reportStats').innerHTML = '';
   document.getElementById('btnInvoice').style.display = 'none';
   document.getElementById('reportService').value = '';
-  document.getElementById('reportEquip').innerHTML = '<option value="">Tots els equips</option>';
+  document.getElementById('reportTeam').innerHTML = '<option value="">Tots els teams</option>';
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('reportDate').value = today;
 }
@@ -863,11 +975,11 @@ async function runReport() {
 
   reportData = data;
 
-  const equips = [...new Set(data.map(s => s.equip).filter(Boolean))].sort();
-  const equipSel = document.getElementById('reportEquip');
-  const prevEquip = equipSel.value;
-  equipSel.innerHTML = '<option value="">Tots els equips</option>' +
-    equips.map(e => `<option value="${e}"${e === prevEquip ? ' selected' : ''}>${e}</option>`).join('');
+  const teams = [...new Set(data.map(s => s.team).filter(Boolean))].sort();
+  const teamSel = document.getElementById('reportTeam');
+  const prevTeam = teamSel.value;
+  teamSel.innerHTML = '<option value="">Tots els teams</option>' +
+    teams.map(t => `<option value="${t}"${t === prevTeam ? ' selected' : ''}>${t}</option>`).join('');
 
   applyReportFilters();
 }
@@ -909,8 +1021,8 @@ function applyReportFilters() {
     return `<tr>
       <td>${s.name}</td>
       <td>${s.service || '—'}</td>
-      <td>${s.running || '—'}</td>
-      <td>${s.equip || '—'}</td>
+      <td>${s.environment || '—'}</td>
+      <td>${s.team || '—'}</td>
       <td>${s.uses.length ? s.uses.join(', ') : '—'}</td>
       <td class="num">${fmtNum(s.vcpus)}</td>
       <td class="num">${fmtNum(s.memory)}</td>
@@ -923,7 +1035,7 @@ function applyReportFilters() {
     <div class="report-table-wrap">
       <table>
         <thead><tr>
-          <th>Nom</th><th>Service</th><th>Running</th><th>Equip</th><th>Usos</th>
+          <th>Nom</th><th>Service</th><th>Entorn</th><th>Team</th><th>Usos</th>
           <th class="num">vCPUs</th><th class="num">Mem (GB)</th>
           <th class="num">Disc (GB)</th><th>Hw Data</th>
         </tr></thead>
@@ -976,10 +1088,10 @@ function renderInvoice() {
     return `<tr>
       <td>${s.name}</td>
       <td>${s.service || '—'}</td>
-      <td>${s.equip || '—'}</td>
+      <td>${s.team || '—'}</td>
       <td>
-        ${s.running || '<span class="invoice-no-price">sense running</span>'}
-        ${s.running && s.price_vcpu == null ? '<span class="invoice-price-hint">sense preu en aquesta data</span>' : ''}
+        ${s.environment || '<span class="invoice-no-price">sense entorn</span>'}
+        ${s.environment && s.price_vcpu == null ? '<span class="invoice-price-hint">sense preu en aquesta data</span>' : ''}
       </td>
       <td class="num">${s.vcpus}<br><span class="invoice-price-hint">${fmtP(s.price_vcpu)}</span></td>
       <td class="num">${fmtC(s.cost_vcpu)}</td>
@@ -998,7 +1110,7 @@ function renderInvoice() {
     <div class="report-table-wrap">
       <table>
         <thead><tr>
-          <th>Nom</th><th>Service</th><th>Equip</th><th>Running</th>
+          <th>Nom</th><th>Service</th><th>Team</th><th>Entorn</th>
           <th class="num">vCPUs</th><th class="num">Cost vCPU</th>
           <th class="num">Mem (GB)</th><th class="num">Cost Mem</th>
           <th class="num">Disc (GB)</th><th class="num">Cost Disc</th>
@@ -1027,4 +1139,4 @@ function showToast(msg, type = 'success') {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-Promise.all([loadUses(), loadRunning(), loadServers()]);
+Promise.all([loadUses(), loadTeams(), loadEnvironments(), loadServers()]);

@@ -42,11 +42,12 @@
 
   <div class="toolbar">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Cercar per nom, service, running, equip, usos..." oninput="filterAndRender()">
+      <input type="text" id="searchInput" placeholder="Cercar per nom, service, team, entorn, usos..." oninput="filterAndRender()">
     </div>
     <button class="btn btn-ghost" onclick="resetSort()" id="btnResetSort" style="display:none">↺ Ordre</button>
     <button class="btn btn-ghost" onclick="openUsesModal()">⚙ Usos</button>
-    <button class="btn btn-ghost" onclick="openRunningModal()">⚙ Running</button>
+    <button class="btn btn-ghost" onclick="openTeamsModal()">⚙ Teams</button>
+    <button class="btn btn-ghost" onclick="openEnvironmentsModal()">⚙ Entorn</button>
     <button class="btn btn-ghost" onclick="openReportModal()">Informe</button>
     <button class="btn btn-primary" onclick="openModal()">+ Nou Servidor</button>
   </div>
@@ -63,9 +64,9 @@
           <th class="sortable" onclick="sortBy('disk_extra')" style="text-align:right">Disk+ <span class="sort-icon" id="si_disk_extra">⇅</span></th>
           <th class="sortable" onclick="sortBy('disk_total')" style="text-align:right">Total Disc <span class="sort-icon" id="si_disk_total">⇅</span></th>
           <th>Service</th>
-          <th>Running</th>
+          <th>Entorn</th>
           <th>Uses</th>
-          <th>Equip</th>
+          <th>Team</th>
           <th class="sortable" onclick="sortBy('data_alta')">Data Alta <span class="sort-icon" id="si_data_alta">⇅</span></th>
           <th class="sortable" onclick="sortBy('data_baixa')">Data Baixa <span class="sort-icon" id="si_data_baixa">⇅</span></th>
           <th>Accions</th>
@@ -103,14 +104,16 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Running</label>
-          <select id="f_running_id">
+          <label>Team</label>
+          <select id="f_team_id">
             <option value="">— No definit —</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Equip</label>
-          <input type="text" id="f_equip" placeholder="ex: Dades">
+          <label>Entorn</label>
+          <select id="f_environment_id">
+            <option value="">— No definit —</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Data Alta</label>
@@ -156,6 +159,27 @@
   </div>
 </div>
 
+<!-- Teams management modal -->
+<div class="modal-overlay modal-sm" id="teamsModalOverlay" onclick="handleTeamsOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Gestionar Teams</div>
+      <button class="modal-close" onclick="closeTeamsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="add-use-row">
+        <input type="text" id="newTeamName" placeholder="Nom del team..." onkeydown="if(event.key==='Enter') saveTeam()">
+        <button class="btn btn-primary" id="btnSaveTeam" onclick="saveTeam()">+ Afegir</button>
+        <button class="btn btn-ghost" id="btnCancelTeam" onclick="cancelTeamEdit()" style="display:none;font-size:0.72rem;padding:0.4rem 0.8rem">Cancel·lar</button>
+      </div>
+      <div id="teamsManagerList"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeTeamsModal()">Tancar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Uses management modal -->
 <div class="modal-overlay modal-sm" id="usesModalOverlay" onclick="handleUsesOverlayClick(event)">
   <div class="modal">
@@ -176,36 +200,36 @@
   </div>
 </div>
 
-<!-- Running management modal -->
-<div class="modal-overlay" id="runningModalOverlay" onclick="handleRunningOverlayClick(event)">
+<!-- Environments management modal -->
+<div class="modal-overlay" id="environmentsModalOverlay" onclick="handleEnvironmentsOverlayClick(event)">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Gestionar Running</div>
-      <button class="modal-close" onclick="closeRunningModal()">✕</button>
+      <div class="modal-title">Gestionar Entorns</div>
+      <button class="modal-close" onclick="closeEnvironmentsModal()">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-grid" style="margin-bottom:1rem">
         <div class="form-group">
-          <label for="newRunningName">Nom *</label>
-          <input type="text" id="newRunningName" placeholder="ex: actiu" onkeydown="if(event.key==='Enter') saveRunning()">
+          <label for="newEnvironmentName">Nom *</label>
+          <input type="text" id="newEnvironmentName" placeholder="ex: AWS EU-West" onkeydown="if(event.key==='Enter') saveEnvironment()">
         </div>
         <div class="form-group">
-          <label for="newRunningCreate">Data creació</label>
-          <input type="date" id="newRunningCreate">
+          <label for="newEnvironmentCreate">Data creació</label>
+          <input type="date" id="newEnvironmentCreate">
         </div>
         <div class="form-group">
-          <label for="newRunningDelete">Data baixa</label>
-          <input type="date" id="newRunningDelete">
+          <label for="newEnvironmentDelete">Data baixa</label>
+          <input type="date" id="newEnvironmentDelete">
         </div>
         <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:0.4rem">
-          <button class="btn btn-primary" id="btnSaveRunning" onclick="saveRunning()">+ Afegir</button>
-          <button class="btn btn-ghost" id="btnCancelRunning" onclick="cancelRunningEdit()" style="display:none;font-size:0.72rem;padding:0.4rem 0.8rem">Cancel·lar</button>
+          <button class="btn btn-primary" id="btnSaveEnvironment" onclick="saveEnvironment()">+ Afegir</button>
+          <button class="btn btn-ghost" id="btnCancelEnvironment" onclick="cancelEnvironmentEdit()" style="display:none;font-size:0.72rem;padding:0.4rem 0.8rem">Cancel·lar</button>
         </div>
       </div>
-      <div id="runningManagerList"></div>
+      <div id="environmentsManagerList"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeRunningModal()">Tancar</button>
+      <button class="btn btn-ghost" onclick="closeEnvironmentsModal()">Tancar</button>
     </div>
   </div>
 </div>
@@ -275,9 +299,9 @@
           </select>
         </div>
         <div class="report-filter-group">
-          <label>Equip</label>
-          <select id="reportEquip" onchange="applyReportFilters()">
-            <option value="">Tots els equips</option>
+          <label>Team</label>
+          <select id="reportTeam" onchange="applyReportFilters()">
+            <option value="">Tots els teams</option>
           </select>
         </div>
         <button class="btn btn-primary" onclick="runReport()" style="align-self:flex-start">Consultar</button>

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<demo_data>
+
+  <uses>
+    <use name="postgresql"/>
+    <use name="python"/>
+    <use name="nginx"/>
+    <use name="redis"/>
+    <use name="docker"/>
+    <use name="airflow"/>
+    <use name="elasticsearch"/>
+    <use name="grafana"/>
+  </uses>
+
+  <teams>
+    <team name="Dades"/>
+    <team name="Backend"/>
+    <team name="Monitoring"/>
+  </teams>
+
+  <environments>
+    <environment name="AWS EU-West-1" create_date="2021-01-01">
+      <prices>
+        <price price_vcpu="0.0480" price_mem="0.0100" price_disk="0.0010" start_date="2021-01-01" end_date="2023-06-01"/>
+        <price price_vcpu="0.0560" price_mem="0.0120" price_disk="0.0012" start_date="2023-06-01"/>
+      </prices>
+    </environment>
+    <environment name="On-Premise BCN" create_date="2019-03-01">
+      <prices>
+        <price price_vcpu="0.0180" price_mem="0.0045" price_disk="0.0004" start_date="2019-03-01"/>
+      </prices>
+    </environment>
+    <environment name="GCP Europe-West1" create_date="2022-09-01">
+      <prices>
+        <price price_vcpu="0.0520" price_mem="0.0110" price_disk="0.0011" start_date="2022-09-01" end_date="2024-01-01"/>
+        <price price_vcpu="0.0590" price_mem="0.0130" price_disk="0.0013" start_date="2024-01-01"/>
+      </prices>
+    </environment>
+    <environment name="Hetzner DE" create_date="2023-11-01">
+      <prices>
+        <price price_vcpu="0.0120" price_mem="0.0030" price_disk="0.0003" start_date="2023-11-01"/>
+      </prices>
+    </environment>
+  </environments>
+
+  <servers>
+
+    <server name="azmidi" service="Testing" team="Dades" data_alta="2023-04-01" environment="AWS EU-West-1">
+      <uses>
+        <use name="postgresql"/>
+        <use name="python"/>
+      </uses>
+      <hardware>
+        <snapshot date="2023-04-01" vcpus="8"  memory="16"  disk0="32"  disk1="1024" disk_extra="100"/>
+        <snapshot date="2024-06-01" vcpus="16" memory="32"  disk0="32"  disk1="2048" disk_extra="200"/>
+      </hardware>
+    </server>
+
+    <server name="galactus" service="Production" team="Dades" data_alta="2021-07-01" environment="On-Premise BCN">
+      <uses>
+        <use name="postgresql"/>
+        <use name="airflow"/>
+        <use name="python"/>
+      </uses>
+      <hardware>
+        <snapshot date="2021-07-01" vcpus="4"  memory="8"   disk0="32"  disk1="0"    disk_extra="0"/>
+        <snapshot date="2022-03-01" vcpus="8"  memory="16"  disk0="64"  disk1="512"  disk_extra="0"/>
+        <snapshot date="2023-09-01" vcpus="16" memory="32"  disk0="64"  disk1="1024" disk_extra="500"/>
+      </hardware>
+    </server>
+
+    <server name="nephilim" service="Production" team="Backend" data_alta="2022-02-01" environment="GCP Europe-West1">
+      <uses>
+        <use name="nginx"/>
+        <use name="docker"/>
+        <use name="python"/>
+      </uses>
+      <hardware>
+        <snapshot date="2022-02-01" vcpus="4"  memory="8"   disk0="50"  disk1="0"    disk_extra="0"/>
+        <snapshot date="2023-01-01" vcpus="8"  memory="16"  disk0="50"  disk1="200"  disk_extra="0"/>
+      </hardware>
+    </server>
+
+    <server name="leviathan" service="Production" team="Backend" data_alta="2022-02-01" environment="GCP Europe-West1">
+      <uses>
+        <use name="nginx"/>
+        <use name="redis"/>
+        <use name="docker"/>
+      </uses>
+      <hardware>
+        <snapshot date="2022-02-01" vcpus="2"  memory="4"   disk0="30"  disk1="0"    disk_extra="0"/>
+        <snapshot date="2024-03-01" vcpus="4"  memory="8"   disk0="30"  disk1="100"  disk_extra="0"/>
+      </hardware>
+    </server>
+
+    <server name="behemoth" service="Staging" team="Backend" data_alta="2023-05-01" environment="Hetzner DE">
+      <uses>
+        <use name="nginx"/>
+        <use name="docker"/>
+        <use name="python"/>
+        <use name="redis"/>
+      </uses>
+      <hardware>
+        <snapshot date="2023-05-01" vcpus="4"  memory="8"   disk0="40"  disk1="0"    disk_extra="0"/>
+      </hardware>
+    </server>
+
+    <server name="sentinel" service="Production" team="Monitoring" data_alta="2021-11-01" environment="On-Premise BCN">
+      <uses>
+        <use name="grafana"/>
+        <use name="elasticsearch"/>
+        <use name="docker"/>
+      </uses>
+      <hardware>
+        <snapshot date="2021-11-01" vcpus="4"  memory="16"  disk0="100" disk1="2000" disk_extra="0"/>
+        <snapshot date="2023-06-01" vcpus="8"  memory="32"  disk0="100" disk1="4000" disk_extra="1000"/>
+      </hardware>
+    </server>
+
+    <server name="oracle" service="Development" team="Dades" data_alta="2020-06-01" data_baixa="2024-01-01">
+      <uses>
+        <use name="postgresql"/>
+      </uses>
+      <hardware>
+        <snapshot date="2020-06-01" vcpus="2"  memory="4"   disk0="20"  disk1="200"  disk_extra="0"/>
+      </hardware>
+    </server>
+
+  </servers>
+
+</demo_data>

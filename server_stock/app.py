@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from dotenv import load_dotenv
 from datetime import date
 import os
+import xml.etree.ElementTree as ET
 
 load_dotenv()
 
@@ -102,16 +103,26 @@ class Use(db.Model):
         return {'id': self.id, 'name': self.name}
 
 
-class Running(db.Model):
-    __tablename__ = 'running'
+class Team(db.Model):
+    __tablename__ = 'teams'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(255), nullable=False, unique=True)
+
+    def to_dict(self):
+        return {'id': self.id, 'name': self.name}
+
+
+class Environment(db.Model):
+    __tablename__ = 'environments'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(255), nullable=False, unique=True)
     create_date = db.Column(db.Date, nullable=False, default=date.today)
     delete_date = db.Column(db.Date)
     prices = db.relationship(
-        'RunningPrice', back_populates='running',
-        order_by='RunningPrice.start_date.desc()',
+        'EnvironmentPrice', back_populates='environment',
+        order_by='EnvironmentPrice.start_date.desc()',
         cascade='all, delete-orphan',
     )
 
@@ -124,23 +135,23 @@ class Running(db.Model):
         }
 
 
-class RunningPrice(db.Model):
-    __tablename__ = 'running_prices'
+class EnvironmentPrice(db.Model):
+    __tablename__ = 'environment_prices'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    running_id = db.Column(db.Integer, db.ForeignKey('running.id', ondelete='CASCADE'), nullable=False)
+    environment_id = db.Column(db.Integer, db.ForeignKey('environments.id', ondelete='CASCADE'), nullable=False)
     price_vcpu = db.Column(db.Numeric(10, 4), nullable=False, default=0)
     price_mem = db.Column(db.Numeric(10, 4), nullable=False, default=0)
     price_disk = db.Column(db.Numeric(10, 4), nullable=False, default=0)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date)
 
-    running = db.relationship('Running', back_populates='prices')
+    environment = db.relationship('Environment', back_populates='prices')
 
     def to_dict(self):
         return {
             'id': self.id,
-            'running_id': self.running_id,
+            'environment_id': self.environment_id,
             'price_vcpu': float(self.price_vcpu),
             'price_mem': float(self.price_mem),
             'price_disk': float(self.price_disk),
@@ -155,12 +166,13 @@ class Server(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(255), nullable=False, unique=True)
     service = db.Column(db.String(255))
-    equip = db.Column(db.String(255))
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id', ondelete='SET NULL'), nullable=True)
     data_alta = db.Column(db.Date)
     data_baixa = db.Column(db.Date)
-    running_id = db.Column(db.Integer, db.ForeignKey('running.id', ondelete='SET NULL'), nullable=True)
+    environment_id = db.Column(db.Integer, db.ForeignKey('environments.id', ondelete='SET NULL'), nullable=True)
 
-    running = db.relationship('Running')
+    team = db.relationship('Team')
+    environment = db.relationship('Environment')
     uses = db.relationship('Use', secondary=server_use, lazy='subquery')
     hardware = db.relationship(
         'ServerHardware', back_populates='server',
@@ -174,10 +186,10 @@ class Server(db.Model):
             'id': self.id,
             'name': self.name,
             'service': self.service,
-            'equip': self.equip,
+            'team': self.team.to_dict() if self.team else None,
             'data_alta': fmt_date(self.data_alta),
             'data_baixa': fmt_date(self.data_baixa),
-            'running': self.running.to_dict() if self.running else None,
+            'environment': self.environment.to_dict() if self.environment else None,
             'uses': [u.to_dict() for u in self.uses],
             'vcpus': hw.vcpus if hw else 0,
             'memory': hw.memory if hw else 0,
@@ -225,25 +237,87 @@ def upsert_hardware(server_id, hw_data, data_modificacio):
     db.session.execute(stmt)
 
 
+DEMO_DATA_PATH = os.path.join(os.path.dirname(__file__), 'demo_data.xml')
+
+
+def _load_demo_data():
+    tree = ET.parse(DEMO_DATA_PATH)
+    root = tree.getroot()
+
+    use_map = {}
+    for el in root.findall('uses/use'):
+        name = el.get('name')
+        use = Use.query.filter_by(name=name).first() or Use(name=name)
+        db.session.add(use)
+        use_map[name] = use
+    db.session.flush()
+
+    team_map = {}
+    for el in root.findall('teams/team'):
+        name = el.get('name')
+        team = Team.query.filter_by(name=name).first() or Team(name=name)
+        db.session.add(team)
+        team_map[name] = team
+    db.session.flush()
+
+    environment_map = {}
+    for el in root.findall('environments/environment'):
+        name = el.get('name')
+        r = Environment.query.filter_by(name=name).first()
+        if not r:
+            r = Environment(
+                name=name,
+                create_date=parse_date(el.get('create_date')) or date.today(),
+                delete_date=parse_date(el.get('delete_date')),
+            )
+            db.session.add(r)
+            db.session.flush()
+            for pel in el.findall('prices/price'):
+                price = EnvironmentPrice(
+                    environment_id=r.id,
+                    price_vcpu=float(pel.get('price_vcpu', 0)),
+                    price_mem=float(pel.get('price_mem', 0)),
+                    price_disk=float(pel.get('price_disk', 0)),
+                    start_date=parse_date(pel.get('start_date')),
+                    end_date=parse_date(pel.get('end_date')),
+                )
+                db.session.add(price)
+        environment_map[name] = r
+    db.session.flush()
+
+    for el in root.findall('servers/server'):
+        name = el.get('name')
+        if Server.query.filter_by(name=name).first():
+            continue
+        environment_name = el.get('environment')
+        team_name = el.get('team')
+        server = Server(
+            name=name,
+            service=el.get('service', ''),
+            team_id=team_map[team_name].id if team_name and team_name in team_map else None,
+            data_alta=parse_date(el.get('data_alta')),
+            data_baixa=parse_date(el.get('data_baixa')),
+            environment_id=environment_map[environment_name].id if environment_name and environment_name in environment_map else None,
+        )
+        server.uses = [use_map[u.get('name')] for u in el.findall('uses/use') if u.get('name') in use_map]
+        db.session.add(server)
+        db.session.flush()
+        for snap in el.findall('hardware/snapshot'):
+            snap_date = parse_date(snap.get('date'))
+            if snap_date:
+                hw_data = {f: int(snap.get(f, 0)) for f in ('vcpus', 'memory', 'disk0', 'disk1', 'disk_extra')}
+                upsert_hardware(server.id, hw_data, snap_date)
+
+    db.session.commit()
+    print('Database seeded with demo data from demo_data.xml')
+
+
 def init_db():
     db.create_all()
-    if Server.query.count() == 0:
-        pg_use = Use(name='postgresql')
-        py_use = Use(name='python')
-        db.session.add_all([pg_use, py_use])
-        db.session.flush()
-
-        azmidi = Server(name='azmidi', service='Testing', equip='Dades', data_alta='2023-04-01')
-        azmidi.uses = [pg_use, py_use]
-        galactus = Server(name='galactus', service='Testing', equip='Dades', data_alta='2021-07-01')
-        db.session.add_all([azmidi, galactus])
-        db.session.flush()
-        if azmidi.data_alta:
-            upsert_hardware(azmidi.id, dict(vcpus=8, memory=16, disk0=32, disk1=1024, disk_extra=100), azmidi.data_alta)
-        if galactus.data_alta:
-            upsert_hardware(galactus.id, dict(vcpus=4, memory=8, disk0=32, disk1=0, disk_extra=0), galactus.data_alta)
-        db.session.commit()
-        print('Database seeded with initial data')
+    if os.environ.get('LOAD_DEMO_DATA', '').lower() in ('1', 'true', 'yes'):
+        _load_demo_data()
+    elif Server.query.count() == 0:
+        print('Empty database — set LOAD_DEMO_DATA=true to seed demo data')
 
 
 # ─── Uses API ─────────────────────────────────────────────────────────────────
@@ -275,22 +349,65 @@ def delete_use(id):
     return jsonify({'message': 'Use deleted', 'id': id})
 
 
-# ─── Running API ──────────────────────────────────────────────────────────────
+# ─── Teams API ────────────────────────────────────────────────────────────────
 
-@app.route('/api/running', methods=['GET'])
-def get_running():
-    return jsonify([r.to_dict() for r in Running.query.order_by(Running.name).all()])
+@app.route('/api/teams', methods=['GET'])
+def get_teams():
+    return jsonify([t.to_dict() for t in Team.query.order_by(Team.name).all()])
 
 
-@app.route('/api/running', methods=['POST'])
-def create_running():
+@app.route('/api/teams', methods=['POST'])
+def create_team():
     data = request.get_json() or {}
     name = (data.get('name') or '').strip()
     if not name:
         return jsonify({'errors': {'name': 'El nom és obligatori'}}), 400
-    if Running.query.filter_by(name=name).first():
-        return jsonify({'errors': {'name': 'Ja existeix aquest running'}}), 409
-    r = Running(
+    if Team.query.filter_by(name=name).first():
+        return jsonify({'errors': {'name': 'Ja existeix aquest team'}}), 409
+    team = Team(name=name)
+    db.session.add(team)
+    db.session.commit()
+    return jsonify(team.to_dict()), 201
+
+
+@app.route('/api/teams/<int:id>', methods=['PUT'])
+def update_team(id):
+    team = Team.query.get_or_404(id)
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'errors': {'name': 'El nom és obligatori'}}), 400
+    if Team.query.filter(Team.name == name, Team.id != id).first():
+        return jsonify({'errors': {'name': 'Ja existeix aquest team'}}), 409
+    team.name = name
+    db.session.commit()
+    return jsonify(team.to_dict())
+
+
+@app.route('/api/teams/<int:id>', methods=['DELETE'])
+def delete_team(id):
+    team = Team.query.get_or_404(id)
+    db.session.delete(team)
+    db.session.commit()
+    return jsonify({'message': 'Team deleted', 'id': id})
+
+
+# ─── Environments API ─────────────────────────────────────────────────────────
+
+@app.route('/api/environments', methods=['GET'])
+def get_environments():
+    return jsonify([r.to_dict() for r in Environment.query.order_by(Environment.name).all()])
+
+
+@app.route('/api/environments', methods=['POST'])
+def create_environment():
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'errors': {'name': 'El nom és obligatori'}}), 400
+    if Environment.query.filter_by(name=name).first():
+        return jsonify({'errors': {'name': 'Ja existeix aquest entorn'}}), 409
+    r = Environment(
         name=name,
         create_date=parse_date(data.get('create_date')) or date.today(),
         delete_date=parse_date(data.get('delete_date')),
@@ -300,16 +417,16 @@ def create_running():
     return jsonify(r.to_dict()), 201
 
 
-@app.route('/api/running/<int:id>', methods=['PUT'])
-def update_running(id):
-    r = Running.query.get_or_404(id)
+@app.route('/api/environments/<int:id>', methods=['PUT'])
+def update_environment(id):
+    r = Environment.query.get_or_404(id)
     data = request.get_json() or {}
     if 'name' in data:
         name = (data['name'] or '').strip()
         if not name:
             return jsonify({'errors': {'name': 'El nom és obligatori'}}), 400
-        if Running.query.filter(Running.name == name, Running.id != id).first():
-            return jsonify({'errors': {'name': 'Ja existeix aquest running'}}), 409
+        if Environment.query.filter(Environment.name == name, Environment.id != id).first():
+            return jsonify({'errors': {'name': 'Ja existeix aquest entorn'}}), 409
         r.name = name
     if 'create_date' in data:
         r.create_date = parse_date(data['create_date']) or r.create_date
@@ -319,39 +436,39 @@ def update_running(id):
     return jsonify(r.to_dict())
 
 
-@app.route('/api/running/<int:id>', methods=['DELETE'])
-def delete_running(id):
-    r = Running.query.get_or_404(id)
+@app.route('/api/environments/<int:id>', methods=['DELETE'])
+def delete_environment(id):
+    r = Environment.query.get_or_404(id)
     db.session.delete(r)
     db.session.commit()
-    return jsonify({'message': 'Running deleted', 'id': id})
+    return jsonify({'message': 'Environment deleted', 'id': id})
 
 
-# ─── Running prices API ───────────────────────────────────────────────────────
+# ─── Environment prices API ───────────────────────────────────────────────────
 
-@app.route('/api/running/<int:id>/prices', methods=['GET'])
-def get_running_prices(id):
-    Running.query.get_or_404(id)
-    prices = (RunningPrice.query
-              .filter_by(running_id=id)
-              .order_by(RunningPrice.start_date.desc())
+@app.route('/api/environments/<int:id>/prices', methods=['GET'])
+def get_environment_prices(id):
+    Environment.query.get_or_404(id)
+    prices = (EnvironmentPrice.query
+              .filter_by(environment_id=id)
+              .order_by(EnvironmentPrice.start_date.desc())
               .all())
     return jsonify([p.to_dict() for p in prices])
 
 
-@app.route('/api/running/<int:id>/prices', methods=['POST'])
-def create_running_price(id):
-    Running.query.get_or_404(id)
+@app.route('/api/environments/<int:id>/prices', methods=['POST'])
+def create_environment_price(id):
+    Environment.query.get_or_404(id)
     data = request.get_json() or {}
     errors = validate_price(data)
     if errors:
         return jsonify({'errors': errors}), 400
     new_start = parse_date(data['start_date'])
-    open_price = RunningPrice.query.filter_by(running_id=id, end_date=None).first()
+    open_price = EnvironmentPrice.query.filter_by(environment_id=id, end_date=None).first()
     if open_price:
         open_price.end_date = new_start
-    price = RunningPrice(
-        running_id=id,
+    price = EnvironmentPrice(
+        environment_id=id,
         price_vcpu=data.get('price_vcpu', 0),
         price_mem=data.get('price_mem', 0),
         price_disk=data.get('price_disk', 0),
@@ -363,9 +480,9 @@ def create_running_price(id):
     return jsonify(price.to_dict()), 201
 
 
-@app.route('/api/running/<int:id>/prices/<int:price_id>', methods=['PUT'])
-def update_running_price(id, price_id):
-    price = RunningPrice.query.filter_by(id=price_id, running_id=id).first_or_404()
+@app.route('/api/environments/<int:id>/prices/<int:price_id>', methods=['PUT'])
+def update_environment_price(id, price_id):
+    price = EnvironmentPrice.query.filter_by(id=price_id, environment_id=id).first_or_404()
     data = request.get_json() or {}
     errors = validate_price(data, require_start_date=False)
     if errors:
@@ -381,9 +498,9 @@ def update_running_price(id, price_id):
     return jsonify(price.to_dict())
 
 
-@app.route('/api/running/<int:id>/prices/<int:price_id>', methods=['DELETE'])
-def delete_running_price(id, price_id):
-    price = RunningPrice.query.filter_by(id=price_id, running_id=id).first_or_404()
+@app.route('/api/environments/<int:id>/prices/<int:price_id>', methods=['DELETE'])
+def delete_environment_price(id, price_id):
+    price = EnvironmentPrice.query.filter_by(id=price_id, environment_id=id).first_or_404()
     db.session.delete(price)
     db.session.commit()
     return jsonify({'message': 'Price deleted', 'id': price_id})
@@ -413,10 +530,10 @@ def create_server():
     server = Server(
         name=data['name'],
         service=data.get('service', ''),
-        equip=data.get('equip', ''),
+        team_id=data.get('team_id') or None,
         data_alta=parse_date(data.get('data_alta')),
         data_baixa=parse_date(data.get('data_baixa')),
-        running_id=data.get('running_id') or None,
+        environment_id=data.get('environment_id') or None,
     )
     if 'use_ids' in data:
         server.uses = Use.query.filter(Use.id.in_(data['use_ids'])).all()
@@ -448,15 +565,17 @@ def update_server(id):
     if new_name and Server.query.filter(Server.name == new_name, Server.id != id).first():
         return jsonify({'errors': {'name': 'Ja existeix un servidor amb aquest nom'}}), 409
 
-    for field in ('name', 'service', 'equip'):
+    for field in ('name', 'service'):
         if field in data:
             setattr(server, field, data[field])
+    if 'team_id' in data:
+        server.team_id = data['team_id'] or None
     if 'data_alta' in data:
         server.data_alta = parse_date(data['data_alta'])
     if 'data_baixa' in data:
         server.data_baixa = parse_date(data['data_baixa'])
-    if 'running_id' in data:
-        server.running_id = data['running_id'] or None
+    if 'environment_id' in data:
+        server.environment_id = data['environment_id'] or None
     if 'use_ids' in data:
         server.uses = Use.query.filter(Use.id.in_(data['use_ids'])).all()
 
@@ -641,8 +760,9 @@ def hardware_report():
     for s in servers:
         hw = hw_map.get(s.id)
         result.append({
-            'id': s.id, 'name': s.name, 'service': s.service, 'equip': s.equip,
-            'running': s.running.name if s.running else None,
+            'id': s.id, 'name': s.name, 'service': s.service,
+            'team': s.team.name if s.team else None,
+            'environment': s.environment.name if s.environment else None,
             'data_alta': fmt_date(s.data_alta), 'data_baixa': fmt_date(s.data_baixa),
             'uses': [u.name for u in s.uses],
             'vcpus': hw.vcpus if hw else None,
@@ -666,30 +786,30 @@ def invoice_report():
 
     servers, hw_map = _active_servers_with_hw(report_date)
 
-    running_ids = list({s.running_id for s in servers if s.running_id})
+    environment_ids = list({s.environment_id for s in servers if s.environment_id})
     price_map = {}
-    if running_ids:
+    if environment_ids:
         latest_price_subq = (
             db.session.query(
-                RunningPrice.running_id,
-                func.max(RunningPrice.start_date).label('max_start'),
+                EnvironmentPrice.environment_id,
+                func.max(EnvironmentPrice.start_date).label('max_start'),
             )
             .filter(
-                RunningPrice.running_id.in_(running_ids),
-                RunningPrice.start_date <= report_date,
-                or_(RunningPrice.end_date.is_(None), RunningPrice.end_date > report_date),
+                EnvironmentPrice.environment_id.in_(environment_ids),
+                EnvironmentPrice.start_date <= report_date,
+                or_(EnvironmentPrice.end_date.is_(None), EnvironmentPrice.end_date > report_date),
             )
-            .group_by(RunningPrice.running_id)
+            .group_by(EnvironmentPrice.environment_id)
             .subquery()
         )
         price_rows = (
-            db.session.query(RunningPrice)
+            db.session.query(EnvironmentPrice)
             .join(latest_price_subq,
-                  (RunningPrice.running_id == latest_price_subq.c.running_id) &
-                  (RunningPrice.start_date == latest_price_subq.c.max_start))
+                  (EnvironmentPrice.environment_id == latest_price_subq.c.environment_id) &
+                  (EnvironmentPrice.start_date == latest_price_subq.c.max_start))
             .all()
         )
-        price_map = {p.running_id: p for p in price_rows}
+        price_map = {p.environment_id: p for p in price_rows}
 
     result = []
     for s in servers:
@@ -698,7 +818,7 @@ def invoice_report():
         memory = hw.memory if hw else 0
         disk   = ((hw.disk0 or 0) + (hw.disk1 or 0) + (hw.disk_extra or 0)) if hw else 0
 
-        price = price_map.get(s.running_id) if s.running_id else None
+        price = price_map.get(s.environment_id) if s.environment_id else None
 
         if price:
             pv = float(price.price_vcpu)
@@ -713,8 +833,9 @@ def invoice_report():
             cost_vcpu = cost_mem = cost_disk = total = None
 
         result.append({
-            'id': s.id, 'name': s.name, 'service': s.service, 'equip': s.equip,
-            'running': s.running.name if s.running else None,
+            'id': s.id, 'name': s.name, 'service': s.service,
+            'team': s.team.name if s.team else None,
+            'environment': s.environment.name if s.environment else None,
             'vcpus': vcpus, 'memory': memory, 'disk': disk,
             'price_vcpu': pv, 'price_mem': pm, 'price_disk': pd,
             'cost_vcpu': cost_vcpu, 'cost_mem': cost_mem, 'cost_disk': cost_disk,
