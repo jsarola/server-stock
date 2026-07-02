@@ -30,6 +30,13 @@ DATABASE_URL=postgresql://usuari:contrasenya@localhost:5432/server_stock
 
 # Port del servidor web (opcional, per defecte 3000)
 PORT=3000
+
+# Carrega dades de demo XML en arrencar (opcional)
+# LOAD_DEMO_DATA=true
+
+# Carrega servidors des d'un CSV de màquines virtuals en arrencar (opcional)
+# LOAD_VM_CSV_DATA=true
+# VM_CSV_DATA_FILE=MaquinesVirtuals.csv
 ```
 
 ## Execució
@@ -40,7 +47,18 @@ poetry run start
 
 L'aplicació estarà disponible a: **http://localhost:3000**
 
-Les taules es creen automàticament en el primer arrencament. Si la base de dades és buida, s'insereixen dues entrades d'exemple.
+Les taules es creen automàticament en el primer arrencament.
+
+Si actives `LOAD_DEMO_DATA=true`, l'aplicació carrega `server_stock/demo_data.xml` en arrencar.
+
+Si actives `LOAD_VM_CSV_DATA=true`, l'aplicació importa el CSV indicat a `VM_CSV_DATA_FILE` en arrencar. Aquesta importació:
+
+- fa servir la primera fila com a capçalera
+- assigna `data_alta=2021-01-01` a tots els servidors
+- importa `data_baixa` només si està definida
+- ignora les columnes `Resolució` i `Fet`
+- crea `teams` i `uses` si no existeixen
+- omet servidors que ja existeixen pel mateix `name`
 
 ## Estructura del projecte
 

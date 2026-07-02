@@ -16,6 +16,22 @@
   color-scheme: dark;
 }
 
+body.light-theme {
+  --bg: #f3f6fb;
+  --surface: #ffffff;
+  --surface2: #e8eef8;
+  --border: #cdd8ea;
+  --accent: #0f5eff;
+  --accent2: #7c3aed;
+  --green: #059669;
+  --red: #dc2626;
+  --yellow: #d97706;
+  --orange: #ea580c;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -48,6 +64,13 @@ body::before {
   padding: 2rem;
 }
 
+
+.layout-shell {
+  display: block;
+}
+
+.main-panel { min-width: 0; }
+
 header {
   display: flex;
   align-items: flex-end;
@@ -55,6 +78,113 @@ header {
   margin-bottom: 2.5rem;
   padding-bottom: 1.5rem;
   border-bottom: 1px solid var(--border);
+}
+
+.menu-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.theme-toggle {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.15s;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.65rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.menu-trigger:hover,
+.menu-dropdown.open .menu-trigger {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.menu-trigger-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.menu-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  width: 290px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.65rem;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition: all 0.16s;
+  z-index: 30;
+}
+
+.menu-dropdown.open .menu-dropdown-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.menu-dropdown-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.85rem 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.menu-dropdown-item:hover {
+  background: var(--surface2);
+  border-color: var(--border);
+}
+
+.menu-dropdown-item strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.menu-dropdown-item span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
 }
 
 /* ── Brand ───────────────────────────────────────────────────────────────── */
@@ -131,6 +261,64 @@ header {
 .btn-danger:hover { background: var(--red); color: white; }
 .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-toggle {
+  background: rgba(16,185,129,0.08);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.btn-toggle:hover,
+.btn-toggle.active {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(16,185,129,0.12);
+}
+
+/* ── Filters panel ───────────────────────────────────────────────────────── */
+
+.filters-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.filters-header {
+  margin-bottom: 0.9rem;
+}
+
+.filters-header h2 {
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  margin-bottom: 0.2rem;
+}
+
+.filters-header span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.filter-group label {
+  font-size: 0.62rem;
+}
+
+.filter-range-controls {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 0.45rem;
+}
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
 
@@ -221,6 +409,13 @@ td { padding: 0.85rem 1rem; font-size: 0.875rem; }
 
 .modal-sm .modal { width: 480px; }
 .modal-wide .modal { width: 900px; }
+.modal-resizable .modal {
+  width: min(1180px, 95vw);
+  min-width: 760px;
+  min-height: 420px;
+  resize: both;
+  overflow: auto;
+}
 
 .modal-header {
   padding: 1.5rem; border-bottom: 1px solid var(--border);
@@ -504,6 +699,20 @@ input.field-error, select.field-error { border-color: var(--red); }
 .invoice-no-price { color: var(--text-muted); font-style: italic; font-size: 0.75rem; }
 .invoice-price-hint { font-family: var(--mono); font-size: 0.68rem; color: var(--text-muted); display: block; }
 .invoice-total-cell { color: var(--accent); font-weight: 600; }
+.invoice-totals-row td {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface2);
+  border-top: 2px solid var(--border);
+  font-family: var(--mono);
+  font-weight: 600;
+  z-index: 1;
+}
+.invoice-totals-row td:first-child {
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
 
 .report-table-wrap { overflow-x: auto; }
 .report-table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -531,6 +740,18 @@ input.field-error, select.field-error { border-color: var(--red); }
 @media (max-width: 768px) {
   .stats-bar { flex-wrap: wrap; }
   .stat-card { min-width: calc(50% - 0.5rem); }
+  .toolbar { flex-wrap: wrap; }
+  .filters-grid { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
+  header { align-items: flex-start; gap: 1rem; }
+  .menu-dropdown-panel {
+    width: min(290px, calc(100vw - 4rem));
+    right: 0;
+  }
+  .modal-resizable .modal {
+    min-width: 0;
+    width: 95vw;
+    resize: none;
+  }
   th, td { padding: 0.7rem 0.6rem; }
 }

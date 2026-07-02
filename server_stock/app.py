@@ -3,15 +3,19 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from dotenv import load_dotenv
-from datetime import date
+from datetime import date, datetime
+import csv
 import os
 import xml.etree.ElementTree as ET
 
 load_dotenv()
 
-PUBLIC_DIR = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')), 'public')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+PUBLIC_DIR = os.path.join(PROJECT_ROOT, 'public')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/server_stock')
+LOAD_VM_CSV_DATA = os.environ.get('LOAD_VM_CSV_DATA', '')
+VM_CSV_DATA_FILE = os.environ.get('VM_CSV_DATA_FILE', 'MaquinesVirtuals.csv')
 
 app = Flask(__name__, static_folder=None)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -34,6 +38,47 @@ def fmt_date(val):
 INT_FIELDS = ('vcpus', 'memory', 'disk0', 'disk1', 'disk_extra')
 DATE_FIELDS = ('data_alta', 'data_baixa')
 SERVICE_OPTIONS = ('Testing', 'Production', 'Staging', 'Development')
+VM_CSV_IMPORT_DATE = date(2021, 1, 1)
+VM_SERVICE_TYPE_MAP = {
+    'Produccio': 'Production',
+    'Production': 'Production',
+    'Testing': 'Testing',
+    'Staging': 'Staging',
+    'Development': 'Development',
+}
+
+
+def parse_csv_date(val):
+    if not val:
+        return None
+    try:
+        return datetime.strptime(val.strip(), '%d/%m/%Y').date()
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_csv_int(val):
+    if val is None:
+        return 0
+    text = str(val).strip()
+    if not text:
+        return 0
+    return int(text)
+
+
+def is_truthy_env(val):
+    return val.lower() in ('1', 'true', 'yes') if val else False
+
+
+def resolve_vm_csv_path(path):
+    return path if os.path.isabs(path) else os.path.join(PROJECT_ROOT, path)
+
+
+def normalize_vm_service_type(val):
+    normalized = VM_SERVICE_TYPE_MAP.get((val or '').strip(), (val or '').strip())
+    if normalized and normalized not in SERVICE_OPTIONS:
+        return None
+    return normalized
 
 def validate(data, require_name=True):
     errors = {}
@@ -312,12 +357,110 @@ def _load_demo_data():
     print('Database seeded with demo data from demo_data.xml')
 
 
+def _load_vm_csv_data():
+    csv_path = resolve_vm_csv_path(VM_CSV_DATA_FILE)
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f'VM CSV data file not found: {csv_path}')
+
+    print(f'Loading VM CSV data from {csv_path}')
+
+    team_map = {team.name: team for team in Team.query.all()}
+    use_map = {use.name: use for use in Use.query.all()}
+    existing_server_names = {name for (name,) in db.session.query(Server.name).all()}
+
+    total_rows = 0
+    created_servers = 0
+    skipped_servers = 0
+    created_teams = 0
+    created_uses = 0
+    disk_mismatch_warnings = 0
+    invalid_service_rows = 0
+
+    with open(csv_path, newline='', encoding='utf-8') as fh:
+        reader = csv.DictReader(fh, delimiter=';')
+        for row in reader:
+            total_rows += 1
+            name = (row.get('Name') or '').strip()
+            if not name:
+                print(f'Skipping VM CSV row {total_rows}: empty Name')
+                continue
+
+            if name in existing_server_names:
+                skipped_servers += 1
+                continue
+
+            service = normalize_vm_service_type(row.get('Tipus'))
+            if service is None:
+                invalid_service_rows += 1
+                print(f"Skipping VM CSV row for {name}: unsupported Tipus '{(row.get('Tipus') or '').strip()}'")
+                continue
+
+            team_name = (row.get('Equip') or '').strip()
+            if team_name and team_name not in team_map:
+                team = Team(name=team_name)
+                db.session.add(team)
+                db.session.flush()
+                team_map[team_name] = team
+                created_teams += 1
+
+            use_name = (row.get('Servei') or '').strip()
+            if use_name and use_name not in use_map:
+                use = Use(name=use_name)
+                db.session.add(use)
+                db.session.flush()
+                use_map[use_name] = use
+                created_uses += 1
+
+            disk0 = parse_csv_int(row.get('Disk-0'))
+            disk1 = parse_csv_int(row.get('Disk-1'))
+            disk_extra = parse_csv_int(row.get('Disk+'))
+            disk_total = parse_csv_int(row.get('Disk'))
+            computed_disk_total = disk0 + disk1 + disk_extra
+            if disk_total and disk_total != computed_disk_total:
+                disk_mismatch_warnings += 1
+                print(f'VM CSV disk mismatch for {name}: Disk={disk_total}, computed={computed_disk_total}')
+
+            server = Server(
+                name=name,
+                service=service,
+                team_id=team_map[team_name].id if team_name else None,
+                data_alta=VM_CSV_IMPORT_DATE,
+                data_baixa=parse_csv_date((row.get('Data Baixa') or '').strip()),
+            )
+            if use_name:
+                server.uses = [use_map[use_name]]
+
+            db.session.add(server)
+            db.session.flush()
+
+            upsert_hardware(server.id, {
+                'vcpus': parse_csv_int(row.get('vCPUS')),
+                'memory': parse_csv_int(row.get('Memory')),
+                'disk0': disk0,
+                'disk1': disk1,
+                'disk_extra': disk_extra,
+            }, VM_CSV_IMPORT_DATE)
+
+            existing_server_names.add(name)
+            created_servers += 1
+
+    db.session.commit()
+    print(
+        'Database seeded with VM CSV data '
+        f'(rows={total_rows}, created_servers={created_servers}, skipped_existing={skipped_servers}, '
+        f'created_teams={created_teams}, created_uses={created_uses}, '
+        f'invalid_service_rows={invalid_service_rows}, disk_warnings={disk_mismatch_warnings})'
+    )
+
+
 def init_db():
     db.create_all()
-    if os.environ.get('LOAD_DEMO_DATA', '').lower() in ('1', 'true', 'yes'):
+    if is_truthy_env(os.environ.get('LOAD_DEMO_DATA', '')):
         _load_demo_data()
+    if is_truthy_env(LOAD_VM_CSV_DATA):
+        _load_vm_csv_data()
     elif Server.query.count() == 0:
-        print('Empty database — set LOAD_DEMO_DATA=true to seed demo data')
+        print('Empty database — set LOAD_DEMO_DATA=true or LOAD_VM_CSV_DATA=true to seed data')
 
 
 # ─── Uses API ─────────────────────────────────────────────────────────────────
