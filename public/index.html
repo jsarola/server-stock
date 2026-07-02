@@ -11,71 +11,178 @@
 <body>
 
 <div class="app">
-  <header>
-    <div class="brand">
-      <div class="brand-icon">SRV</div>
-      <div class="brand-text">
-        <h1>Infraestructura</h1>
-        <span>Gestió de Servidors</span>
+  <div class="layout-shell">
+    <main class="main-panel">
+      <header>
+        <div class="brand">
+          <div class="brand-icon">SRV</div>
+          <div class="brand-text">
+            <h1>Infraestructura</h1>
+            <span>Gestió de Servidors</span>
+          </div>
+        </div>
+        <div class="menu-dropdown" id="menuDropdown">
+          <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Canviar tema">
+            <span id="themeToggleIcon">◐</span>
+          </button>
+          <button class="menu-trigger" id="menuTrigger" onclick="toggleManagementMenu(event)" aria-expanded="false" aria-controls="managementMenu">
+            <span class="menu-trigger-icon">☰</span>
+            <span>Menú</span>
+          </button>
+          <div class="menu-dropdown-panel" id="managementMenu">
+            <button class="menu-dropdown-item" onclick="openUsesModal(); closeManagementMenu()">
+              <strong>Usos</strong>
+              <span>Afegir o canviar usos dels servidors</span>
+            </button>
+            <button class="menu-dropdown-item" onclick="openTeamsModal(); closeManagementMenu()">
+              <strong>Teams</strong>
+              <span>Administrar equips responsables</span>
+            </button>
+            <button class="menu-dropdown-item" onclick="openEnvironmentsModal(); closeManagementMenu()">
+              <strong>Entorns</strong>
+              <span>Crear, editar o retirar entorns i preus</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-label">Servidors</div>
+          <div class="stat-value" id="statTotal">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">vCPUs totals</div>
+          <div class="stat-value" id="statVcpus">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Memòria total</div>
+          <div class="stat-value" id="statMemory">—<span class="stat-unit">GB</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Disc total</div>
+          <div class="stat-value" id="statDisk">—<span class="stat-unit">GB</span></div>
+        </div>
       </div>
-    </div>
-  </header>
 
-  <div class="stats-bar">
-    <div class="stat-card">
-      <div class="stat-label">Servidors</div>
-      <div class="stat-value" id="statTotal">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">vCPUs totals</div>
-      <div class="stat-value" id="statVcpus">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Memòria total</div>
-      <div class="stat-value" id="statMemory">—<span class="stat-unit">GB</span></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Disc total</div>
-      <div class="stat-value" id="statDisk">—<span class="stat-unit">GB</span></div>
-    </div>
-  </div>
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Cercar per nom, service, team, entorn, usos..." oninput="filterAndRender()">
+        </div>
+        <button class="btn btn-toggle" id="btnOnlyActive" onclick="toggleOnlyActive()">Només actius</button>
+        <button class="btn btn-ghost" onclick="resetAllFilters()">Netejar filtres</button>
+        <button class="btn btn-ghost" onclick="resetSort()" id="btnResetSort" style="display:none">↺ Ordre</button>
+        <button class="btn btn-ghost" onclick="openReportModal()">Informe</button>
+        <button class="btn btn-primary" onclick="openModal()">+ Nou Servidor</button>
+      </div>
 
-  <div class="toolbar">
-    <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Cercar per nom, service, team, entorn, usos..." oninput="filterAndRender()">
-    </div>
-    <button class="btn btn-ghost" onclick="resetSort()" id="btnResetSort" style="display:none">↺ Ordre</button>
-    <button class="btn btn-ghost" onclick="openUsesModal()">⚙ Usos</button>
-    <button class="btn btn-ghost" onclick="openTeamsModal()">⚙ Teams</button>
-    <button class="btn btn-ghost" onclick="openEnvironmentsModal()">⚙ Entorn</button>
-    <button class="btn btn-ghost" onclick="openReportModal()">Informe</button>
-    <button class="btn btn-primary" onclick="openModal()">+ Nou Servidor</button>
-  </div>
+      <section class="filters-panel">
+        <div class="filters-header">
+          <div>
+            <h2>Filtres del llistat</h2>
+            <span>Combina text, valors exactes i comparadors per numerics i dates.</span>
+          </div>
+        </div>
+        <div class="filters-grid">
+          <div class="filter-group">
+            <label for="filterService">Service</label>
+            <select id="filterService" onchange="filterAndRender()">
+              <option value="">Tots</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filterEnvironment">Entorn</label>
+            <select id="filterEnvironment" onchange="filterAndRender()">
+              <option value="">Tots</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filterUse">Uses</label>
+            <select id="filterUse" onchange="filterAndRender()">
+              <option value="">Tots</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filterTeam">Team</label>
+            <select id="filterTeam" onchange="filterAndRender()">
+              <option value="">Tots</option>
+            </select>
+          </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th class="sortable" onclick="sortBy('name')">Name <span class="sort-icon" id="si_name">⇅</span></th>
-          <th class="sortable" onclick="sortBy('vcpus')" style="text-align:right">vCPUs <span class="sort-icon" id="si_vcpus">⇅</span></th>
-          <th class="sortable" onclick="sortBy('memory')" style="text-align:right">Mem (GB) <span class="sort-icon" id="si_memory">⇅</span></th>
-          <th class="sortable" onclick="sortBy('disk0')" style="text-align:right">Disk-0 <span class="sort-icon" id="si_disk0">⇅</span></th>
-          <th class="sortable" onclick="sortBy('disk1')" style="text-align:right">Disk-1 <span class="sort-icon" id="si_disk1">⇅</span></th>
-          <th class="sortable" onclick="sortBy('disk_extra')" style="text-align:right">Disk+ <span class="sort-icon" id="si_disk_extra">⇅</span></th>
-          <th class="sortable" onclick="sortBy('disk_total')" style="text-align:right">Total Disc <span class="sort-icon" id="si_disk_total">⇅</span></th>
-          <th>Service</th>
-          <th>Entorn</th>
-          <th>Uses</th>
-          <th>Team</th>
-          <th class="sortable" onclick="sortBy('data_alta')">Data Alta <span class="sort-icon" id="si_data_alta">⇅</span></th>
-          <th class="sortable" onclick="sortBy('data_baixa')">Data Baixa <span class="sort-icon" id="si_data_baixa">⇅</span></th>
-          <th>Accions</th>
-        </tr>
-      </thead>
-      <tbody id="tableBody">
-        <tr><td colspan="14"><div class="empty-state"><div class="icon">⟳</div><p>Carregant...</p></div></td></tr>
-      </tbody>
-    </table>
+          <div class="filter-group filter-range">
+            <label>vCPUs</label>
+            <div class="filter-range-controls">
+              <select id="filterVcpusOp" onchange="filterAndRender()">
+                <option value="">Cap</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value="=">=</option>
+              </select>
+              <input type="number" id="filterVcpusValue" min="0" placeholder="quantitat" oninput="filterAndRender()">
+            </div>
+          </div>
+          <div class="filter-group filter-range">
+            <label>Memòria</label>
+            <div class="filter-range-controls">
+              <select id="filterMemoryOp" onchange="filterAndRender()">
+                <option value="">Cap</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value="=">=</option>
+              </select>
+              <input type="number" id="filterMemoryValue" min="0" placeholder="GB" oninput="filterAndRender()">
+            </div>
+          </div>
+          <div class="filter-group filter-range">
+            <label>Total Disc</label>
+            <div class="filter-range-controls">
+              <select id="filterDiskOp" onchange="filterAndRender()">
+                <option value="">Cap</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value="=">=</option>
+              </select>
+              <input type="number" id="filterDiskValue" min="0" placeholder="GB" oninput="filterAndRender()">
+            </div>
+          </div>
+          <div class="filter-group filter-range">
+            <label>Data Alta</label>
+            <div class="filter-range-controls">
+              <select id="filterDataAltaOp" onchange="filterAndRender()">
+                <option value="">Cap</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value="=">=</option>
+              </select>
+              <input type="date" id="filterDataAltaValue" onchange="filterAndRender()">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable" onclick="sortBy('name')">Name <span class="sort-icon" id="si_name">⇅</span></th>
+              <th class="sortable" onclick="sortBy('vcpus')" style="text-align:right">vCPUs <span class="sort-icon" id="si_vcpus">⇅</span></th>
+              <th class="sortable" onclick="sortBy('memory')" style="text-align:right">Mem (GB) <span class="sort-icon" id="si_memory">⇅</span></th>
+              <th class="sortable" onclick="sortBy('disk_total')" style="text-align:right">Total Disc <span class="sort-icon" id="si_disk_total">⇅</span></th>
+              <th>Service</th>
+              <th>Entorn</th>
+              <th>Uses</th>
+              <th>Team</th>
+              <th class="sortable" onclick="sortBy('data_alta')">Data Alta <span class="sort-icon" id="si_data_alta">⇅</span></th>
+              <th class="sortable" onclick="sortBy('data_baixa')">Data Baixa <span class="sort-icon" id="si_data_baixa">⇅</span></th>
+              <th>Accions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="11"><div class="empty-state"><div class="icon">⟳</div><p>Carregant...</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
   </div>
 </div>
 
@@ -317,7 +424,7 @@
 </div>
 
 <!-- Invoice modal -->
-<div class="modal-overlay modal-wide" id="invoiceModalOverlay" onclick="handleInvoiceOverlayClick(event)">
+<div class="modal-overlay modal-wide modal-resizable" id="invoiceModalOverlay" onclick="handleInvoiceOverlayClick(event)">
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title" id="invoiceTitle">Factura</div>
@@ -328,6 +435,7 @@
     </div>
     <div class="modal-footer">
       <div id="invoiceGrandTotal" class="invoice-grand-total"></div>
+      <button class="btn btn-ghost" id="btnInvoiceCsv" onclick="downloadInvoiceCsv()" style="display:none">CSV</button>
       <button class="btn btn-ghost" onclick="closeInvoiceModal()">Tancar</button>
     </div>
   </div>

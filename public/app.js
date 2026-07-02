@@ -6,6 +6,27 @@ let allTeams = [];
 let allEnvironments = [];
 let editingId = null;
 let sortState = { key: null, dir: 1 };
+let onlyActive = false;
+let managementMenuOpen = false;
+let currentTheme = 'dark';
+
+function applyTheme(theme) {
+  currentTheme = theme === 'light' ? 'light' : 'dark';
+  document.body.classList.toggle('light-theme', currentTheme === 'light');
+  const icon = document.getElementById('themeToggleIcon');
+  if (icon) icon.textContent = currentTheme === 'light' ? '◑' : '◐';
+}
+
+function toggleTheme() {
+  applyTheme(currentTheme === 'light' ? 'dark' : 'light');
+  window.localStorage.setItem('theme', currentTheme);
+}
+
+function initTheme() {
+  const savedTheme = window.localStorage.getItem('theme');
+  const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  applyTheme(savedTheme || (prefersLight ? 'light' : 'dark'));
+}
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
@@ -13,31 +34,44 @@ async function loadServers() {
   const res = await fetch('/api/servers');
   allServers = await res.json();
   filterAndRender();
-  loadStats();
 }
 
 async function loadUses() {
   const res = await fetch('/api/uses');
   allUses = await res.json();
+  populateFilterOptions();
 }
 
 async function loadTeams() {
   const res = await fetch('/api/teams');
   allTeams = await res.json();
+  populateFilterOptions();
 }
 
 async function loadEnvironments() {
   const res = await fetch('/api/environments');
   allEnvironments = await res.json();
+  populateFilterOptions();
 }
 
-async function loadStats() {
-  const res = await fetch('/api/stats');
-  const s = await res.json();
-  document.getElementById('statTotal').textContent = s.total_servers;
-  document.getElementById('statVcpus').textContent = s.total_vcpus || 0;
-  document.getElementById('statMemory').innerHTML = `${s.total_memory_gb || 0}<span class="stat-unit">GB</span>`;
-  document.getElementById('statDisk').innerHTML = `${s.total_disk_gb || 0}<span class="stat-unit">GB</span>`;
+function loadStats(servers = allServers) {
+  const totals = servers.reduce((acc, server) => {
+    acc.total_servers += 1;
+    acc.total_vcpus += server.vcpus || 0;
+    acc.total_memory_gb += server.memory || 0;
+    acc.total_disk_gb += diskTotal(server);
+    return acc;
+  }, {
+    total_servers: 0,
+    total_vcpus: 0,
+    total_memory_gb: 0,
+    total_disk_gb: 0,
+  });
+
+  document.getElementById('statTotal').textContent = totals.total_servers;
+  document.getElementById('statVcpus').textContent = fmt2(totals.total_vcpus);
+  document.getElementById('statMemory').innerHTML = `${fmt2(totals.total_memory_gb)}<span class="stat-unit">GB</span>`;
+  document.getElementById('statDisk').innerHTML = `${fmt2(totals.total_disk_gb)}<span class="stat-unit">GB</span>`;
 }
 
 // ── Table rendering ───────────────────────────────────────────────────────────
@@ -53,10 +87,108 @@ function fmtDate(val) {
   return val;
 }
 
+function fmt2(val) {
+  return Number(val || 0).toFixed(2);
+}
+
+function compareNumberFilter(actual, op, rawValue) {
+  if (!op || rawValue === '') return true;
+  const expected = Number(rawValue);
+  if (Number.isNaN(expected)) return true;
+  if (op === '>') return actual > expected;
+  if (op === '<') return actual < expected;
+  if (op === '=') return actual === expected;
+  return true;
+}
+
+function compareDateFilter(actual, op, expected) {
+  if (!op || !expected || !actual) return !op || !expected;
+  if (op === '>') return actual > expected;
+  if (op === '<') return actual < expected;
+  if (op === '=') return actual === expected;
+  return true;
+}
+
+function getFilterState() {
+  return {
+    text: document.getElementById('searchInput').value.toLowerCase().trim(),
+    service: document.getElementById('filterService').value,
+    environment: document.getElementById('filterEnvironment').value,
+    use: document.getElementById('filterUse').value,
+    team: document.getElementById('filterTeam').value,
+    vcpusOp: document.getElementById('filterVcpusOp').value,
+    vcpusValue: document.getElementById('filterVcpusValue').value,
+    memoryOp: document.getElementById('filterMemoryOp').value,
+    memoryValue: document.getElementById('filterMemoryValue').value,
+    diskOp: document.getElementById('filterDiskOp').value,
+    diskValue: document.getElementById('filterDiskValue').value,
+    dataAltaOp: document.getElementById('filterDataAltaOp').value,
+    dataAltaValue: document.getElementById('filterDataAltaValue').value,
+  };
+}
+
+function populateSelectOptions(selectId, options, defaultLabel) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  const currentValue = select.value;
+  select.innerHTML = `<option value="">${defaultLabel}</option>` +
+    options.map(option => `<option value="${option}">${option}</option>`).join('');
+  select.value = options.includes(currentValue) ? currentValue : '';
+}
+
+function populateFilterOptions() {
+  populateSelectOptions('filterService', [...SERVICE_OPTIONS], 'Tots');
+  populateSelectOptions('filterEnvironment', allEnvironments.map(r => r.name).sort((a, b) => a.localeCompare(b)), 'Tots');
+  populateSelectOptions('filterUse', allUses.map(u => u.name).sort((a, b) => a.localeCompare(b)), 'Tots');
+  populateSelectOptions('filterTeam', allTeams.map(t => t.name).sort((a, b) => a.localeCompare(b)), 'Tots');
+}
+
+function toggleOnlyActive() {
+  onlyActive = !onlyActive;
+  document.getElementById('btnOnlyActive').classList.toggle('active', onlyActive);
+  filterAndRender();
+}
+
+function resetAllFilters() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('filterService').value = '';
+  document.getElementById('filterEnvironment').value = '';
+  document.getElementById('filterUse').value = '';
+  document.getElementById('filterTeam').value = '';
+  document.getElementById('filterVcpusOp').value = '';
+  document.getElementById('filterVcpusValue').value = '';
+  document.getElementById('filterMemoryOp').value = '';
+  document.getElementById('filterMemoryValue').value = '';
+  document.getElementById('filterDiskOp').value = '';
+  document.getElementById('filterDiskValue').value = '';
+  document.getElementById('filterDataAltaOp').value = '';
+  document.getElementById('filterDataAltaValue').value = '';
+  onlyActive = false;
+  document.getElementById('btnOnlyActive').classList.remove('active');
+  filterAndRender();
+}
+
+function toggleManagementMenu(event) {
+  if (event) event.stopPropagation();
+  managementMenuOpen = !managementMenuOpen;
+  const dropdown = document.getElementById('menuDropdown');
+  const trigger = document.getElementById('menuTrigger');
+  dropdown.classList.toggle('open', managementMenuOpen);
+  trigger.setAttribute('aria-expanded', managementMenuOpen ? 'true' : 'false');
+}
+
+function closeManagementMenu() {
+  managementMenuOpen = false;
+  const dropdown = document.getElementById('menuDropdown');
+  const trigger = document.getElementById('menuTrigger');
+  if (dropdown) dropdown.classList.remove('open');
+  if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
 function renderTable(servers) {
   const tbody = document.getElementById('tableBody');
   if (!servers.length) {
-    tbody.innerHTML = `<tr><td colspan="14"><div class="empty-state"><div class="icon">◌</div><p>No s'han trobat servidors</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="icon">◌</div><p>No s'han trobat servidors</p></div></td></tr>`;
     return;
   }
   tbody.innerHTML = servers.map(s => {
@@ -72,9 +204,6 @@ function renderTable(servers) {
       <td><span class="cell-name">${s.name}</span></td>
       <td class="cell-num">${s.vcpus}</td>
       <td class="cell-num">${s.memory}</td>
-      <td class="cell-num ${s.disk0 === 0 ? 'zero' : ''}">${s.disk0}</td>
-      <td class="cell-num ${s.disk1 === 0 ? 'zero' : ''}">${s.disk1 || '—'}</td>
-      <td class="cell-num ${s.disk_extra === 0 ? 'zero' : ''}">${s.disk_extra || '—'}</td>
       <td class="cell-num"><strong>${total}</strong></td>
       <td>${s.service ? `<span class="badge badge-service">${s.service}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
       <td>${environmentBadge}</td>
@@ -96,14 +225,28 @@ function renderTable(servers) {
 // ── Filter & sort ─────────────────────────────────────────────────────────────
 
 function filterAndRender() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  let list = allServers.filter(s =>
-    s.name.toLowerCase().includes(q) ||
-    (s.service || '').toLowerCase().includes(q) ||
-    (s.team?.name || '').toLowerCase().includes(q) ||
-    (s.environment?.name || '').toLowerCase().includes(q) ||
-    (s.uses || []).some(u => u.name.toLowerCase().includes(q))
-  );
+  const filters = getFilterState();
+  let list = allServers.filter(s => {
+    const matchesText = !filters.text ||
+      s.name.toLowerCase().includes(filters.text) ||
+      (s.service || '').toLowerCase().includes(filters.text) ||
+      (s.team?.name || '').toLowerCase().includes(filters.text) ||
+      (s.environment?.name || '').toLowerCase().includes(filters.text) ||
+      (s.uses || []).some(u => u.name.toLowerCase().includes(filters.text));
+
+    if (!matchesText) return false;
+    if (onlyActive && s.data_baixa) return false;
+    if (filters.service && s.service !== filters.service) return false;
+    if (filters.environment && (s.environment?.name || '') !== filters.environment) return false;
+    if (filters.team && (s.team?.name || '') !== filters.team) return false;
+    if (filters.use && !(s.uses || []).some(u => u.name === filters.use)) return false;
+    if (!compareNumberFilter(s.vcpus || 0, filters.vcpusOp, filters.vcpusValue)) return false;
+    if (!compareNumberFilter(s.memory || 0, filters.memoryOp, filters.memoryValue)) return false;
+    if (!compareNumberFilter(diskTotal(s), filters.diskOp, filters.diskValue)) return false;
+    if (!compareDateFilter(s.data_alta, filters.dataAltaOp, filters.dataAltaValue)) return false;
+
+    return true;
+  });
 
   if (sortState.key) {
     list = [...list].sort((a, b) => {
@@ -114,6 +257,7 @@ function filterAndRender() {
     });
   }
 
+  loadStats(list);
   renderTable(list);
 }
 
@@ -137,7 +281,7 @@ function resetSort() {
 }
 
 function updateSortHeaders() {
-  const keys = ['name','vcpus','memory','disk0','disk1','disk_extra','disk_total','data_alta','data_baixa'];
+  const keys = ['name','vcpus','memory','disk_total','data_alta','data_baixa'];
   keys.forEach(k => {
     const el = document.getElementById(`si_${k}`);
     const th = el?.closest('th');
@@ -151,6 +295,8 @@ function updateSortHeaders() {
     }
   });
 }
+
+const SERVICE_OPTIONS = ['Testing', 'Production', 'Staging', 'Development'];
 
 // ── Server form ───────────────────────────────────────────────────────────────
 
@@ -1045,9 +1191,9 @@ function applyReportFilters() {
 
   statsEl.innerHTML = `
     <span>${filtered.length} servidor${filtered.length !== 1 ? 's' : ''}</span>
-    <span>${totalVcpus} vCPUs</span>
-    <span>${totalMem} GB mem</span>
-    <span>${totalDisk} GB disc</span>
+    <span>${fmt2(totalVcpus)} vCPUs</span>
+    <span>${fmt2(totalMem)} GB mem</span>
+    <span>${fmt2(totalDisk)} GB disc</span>
     ${noHw ? `<span>${noHw} sense maquinari</span>` : ''}`;
 }
 
@@ -1061,6 +1207,7 @@ async function openInvoiceModal() {
   document.getElementById('invoiceModalOverlay').classList.add('open');
   document.getElementById('invoiceResults').innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem">Carregant...</p>';
   document.getElementById('invoiceGrandTotal').innerHTML = '';
+  document.getElementById('btnInvoiceCsv').style.display = 'none';
 
   const res = await fetch(`/api/report/invoice?date=${dateVal}`);
   const data = await res.json();
@@ -1080,7 +1227,7 @@ function handleInvoiceOverlayClick(e) {
 }
 
 function renderInvoice() {
-  const fmtC = v => v == null ? '<span class="invoice-no-price">—</span>' : v.toFixed(4);
+  const fmtC = v => v == null ? '<span class="invoice-no-price">—</span>' : fmt2(v);
   const fmtP = v => v == null ? '' : `€${v.toFixed(4)}/u`;
 
   const rows = invoiceData.map(s => {
@@ -1093,11 +1240,11 @@ function renderInvoice() {
         ${s.environment || '<span class="invoice-no-price">sense entorn</span>'}
         ${s.environment && s.price_vcpu == null ? '<span class="invoice-price-hint">sense preu en aquesta data</span>' : ''}
       </td>
-      <td class="num">${s.vcpus}<br><span class="invoice-price-hint">${fmtP(s.price_vcpu)}</span></td>
+      <td class="num">${fmt2(s.vcpus)}<br><span class="invoice-price-hint">${fmtP(s.price_vcpu)}</span></td>
       <td class="num">${fmtC(s.cost_vcpu)}</td>
-      <td class="num">${s.memory}<br><span class="invoice-price-hint">${fmtP(s.price_mem)}</span></td>
+      <td class="num">${fmt2(s.memory)}<br><span class="invoice-price-hint">${fmtP(s.price_mem)}</span></td>
       <td class="num">${fmtC(s.cost_mem)}</td>
-      <td class="num">${s.disk}<br><span class="invoice-price-hint">${fmtP(s.price_disk)}</span></td>
+      <td class="num">${fmt2(s.disk)}<br><span class="invoice-price-hint">${fmtP(s.price_disk)}</span></td>
       <td class="num">${fmtC(s.cost_disk)}</td>
       <td class="num${noPrice ? '' : ' invoice-total-cell'}">${fmtC(s.total)}</td>
     </tr>`;
@@ -1105,6 +1252,36 @@ function renderInvoice() {
 
   const grandTotal = invoiceData.reduce((sum, s) => sum + (s.total || 0), 0);
   const countPriced = invoiceData.filter(s => s.total != null).length;
+  const totals = invoiceData.reduce((acc, s) => {
+    acc.vcpus += s.vcpus || 0;
+    acc.costVcpu += s.cost_vcpu || 0;
+    acc.memory += s.memory || 0;
+    acc.costMem += s.cost_mem || 0;
+    acc.disk += s.disk || 0;
+    acc.costDisk += s.cost_disk || 0;
+    acc.total += s.total || 0;
+    return acc;
+  }, {
+    vcpus: 0,
+    costVcpu: 0,
+    memory: 0,
+    costMem: 0,
+    disk: 0,
+    costDisk: 0,
+    total: 0,
+  });
+
+  const totalsRow = `
+    <tr class="invoice-totals-row">
+      <td colspan="4">Totals</td>
+      <td class="num">${fmt2(totals.vcpus)}</td>
+      <td class="num">${fmt2(totals.costVcpu)}</td>
+      <td class="num">${fmt2(totals.memory)}</td>
+      <td class="num">${fmt2(totals.costMem)}</td>
+      <td class="num">${fmt2(totals.disk)}</td>
+      <td class="num">${fmt2(totals.costDisk)}</td>
+      <td class="num invoice-total-cell">${fmt2(totals.total)}</td>
+    </tr>`;
 
   document.getElementById('invoiceResults').innerHTML = `
     <div class="report-table-wrap">
@@ -1117,15 +1294,70 @@ function renderInvoice() {
           <th class="num">Total</th>
         </tr></thead>
         <tbody>${rows}</tbody>
+        <tfoot>${totalsRow}</tfoot>
       </table>
     </div>`;
 
   document.getElementById('invoiceGrandTotal').innerHTML = `
     <span class="igt-label">Total factura</span>
-    <span class="igt-value">${grandTotal.toFixed(4)}</span>
+    <span class="igt-value">${fmt2(grandTotal)}</span>
     ${countPriced < invoiceData.length
       ? `<span class="igt-label">(${invoiceData.length - countPriced} servidor${invoiceData.length - countPriced !== 1 ? 's' : ''} sense preu)</span>`
       : ''}`;
+
+  document.getElementById('btnInvoiceCsv').style.display = invoiceData.length ? '' : 'none';
+}
+
+function escapeCsvValue(value) {
+  const text = String(value ?? '');
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function downloadInvoiceCsv() {
+  if (!invoiceData.length) return;
+
+  const headers = ['Nom', 'Service', 'Team', 'Entorn', 'vCPUs', 'Cost vCPU', 'Mem (GB)', 'Cost Mem', 'Disc (GB)', 'Cost Disc', 'Total'];
+  const rows = invoiceData.map(s => [
+    s.name,
+    s.service || '',
+    s.team || '',
+    s.environment || '',
+    fmt2(s.vcpus),
+    fmt2(s.cost_vcpu),
+    fmt2(s.memory),
+    fmt2(s.cost_mem),
+    fmt2(s.disk),
+    fmt2(s.cost_disk),
+    fmt2(s.total),
+  ]);
+
+  const totals = invoiceData.reduce((acc, s) => {
+    acc.vcpus += s.vcpus || 0;
+    acc.costVcpu += s.cost_vcpu || 0;
+    acc.memory += s.memory || 0;
+    acc.costMem += s.cost_mem || 0;
+    acc.disk += s.disk || 0;
+    acc.costDisk += s.cost_disk || 0;
+    acc.total += s.total || 0;
+    return acc;
+  }, { vcpus: 0, costVcpu: 0, memory: 0, costMem: 0, disk: 0, costDisk: 0, total: 0 });
+
+  rows.push(['Totals', '', '', '', fmt2(totals.vcpus), fmt2(totals.costVcpu), fmt2(totals.memory), fmt2(totals.costMem), fmt2(totals.disk), fmt2(totals.costDisk), fmt2(totals.total)]);
+
+  const csv = [headers, ...rows]
+    .map(row => row.map(escapeCsvValue).join(';'))
+    .join('\n');
+
+  const dateVal = document.getElementById('reportDate').value || 'factura';
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `factura-${dateVal}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -1137,6 +1369,13 @@ function showToast(msg, type = 'success') {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+document.addEventListener('click', e => {
+  const dropdown = document.getElementById('menuDropdown');
+  if (!managementMenuOpen || !dropdown) return;
+  if (!dropdown.contains(e.target)) closeManagementMenu();
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+initTheme();
 Promise.all([loadUses(), loadTeams(), loadEnvironments(), loadServers()]);
