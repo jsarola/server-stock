@@ -27,10 +27,18 @@ db = SQLAlchemy(app)
 def parse_date(val):
     if not val:
         return None
-    try:
-        return date.fromisoformat(val)
-    except (ValueError, TypeError):
-        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+
+    text = str(val).strip()
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
 
 def fmt_date(val):
     return val.isoformat() if val else None
@@ -104,7 +112,7 @@ def validate(data, require_name=True):
             continue
         val = data[field]
         if val and parse_date(val) is None:
-            errors[field] = f'{field} no és una data vàlida (format: yyyy-mm-dd)'
+            errors[field] = f'{field} no és una data vàlida (format: yyyy/mm/dd)'
 
     return errors or None
 
@@ -124,11 +132,11 @@ def validate_price(data, require_start_date=True):
         if not data.get('start_date'):
             errors['start_date'] = "La data d'inici és obligatòria"
         elif parse_date(data['start_date']) is None:
-            errors['start_date'] = 'start_date no és una data vàlida'
+            errors['start_date'] = 'start_date no és una data vàlida (format: yyyy/mm/dd)'
     elif data.get('start_date') and parse_date(data['start_date']) is None:
-        errors['start_date'] = 'start_date no és una data vàlida'
+        errors['start_date'] = 'start_date no és una data vàlida (format: yyyy/mm/dd)'
     if data.get('end_date') and parse_date(data['end_date']) is None:
-        errors['end_date'] = 'end_date no és una data vàlida'
+        errors['end_date'] = 'end_date no és una data vàlida (format: yyyy/mm/dd)'
     return errors or None
 
 
@@ -777,7 +785,7 @@ def add_server_history(id):
         return jsonify({'error': 'data_modificacio is required'}), 400
     snap_date = parse_date(date_str)
     if not snap_date:
-        return jsonify({'error': 'Invalid date format (expected yyyy-mm-dd)'}), 400
+        return jsonify({'error': 'Invalid date format (expected yyyy/mm/dd)'}), 400
     errs = _validate_hw_fields(data)
     if errs:
         return jsonify({'errors': errs}), 400
@@ -896,7 +904,7 @@ def hardware_report():
         return jsonify({'error': 'date parameter required'}), 400
     report_date = parse_date(date_str)
     if not report_date:
-        return jsonify({'error': 'Invalid date format (expected yyyy-mm-dd)'}), 400
+        return jsonify({'error': 'Invalid date format (expected yyyy/mm/dd)'}), 400
 
     servers, hw_map = _active_servers_with_hw(report_date)
     result = []

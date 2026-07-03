@@ -154,7 +154,7 @@
                 <option value="<">&lt;</option>
                 <option value="=">=</option>
               </select>
-              <input type="date" id="filterDataAltaValue" onchange="filterAndRender()">
+              <input type="text" id="filterDataAltaValue" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" onchange="filterAndRender()">
             </div>
           </div>
         </div>
@@ -224,11 +224,11 @@
         </div>
         <div class="form-group">
           <label>Data Alta</label>
-          <input type="date" id="f_data_alta">
+          <input type="text" id="f_data_alta" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd">
         </div>
         <div class="form-group">
           <label>Data Baixa</label>
-          <input type="date" id="f_data_baixa">
+          <input type="text" id="f_data_baixa" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd">
         </div>
       </div>
       <div class="form-section">Usos</div>
@@ -322,11 +322,11 @@
         </div>
         <div class="form-group">
           <label for="newEnvironmentCreate">Data creació</label>
-          <input type="date" id="newEnvironmentCreate">
+          <input type="text" id="newEnvironmentCreate" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd">
         </div>
         <div class="form-group">
           <label for="newEnvironmentDelete">Data baixa</label>
-          <input type="date" id="newEnvironmentDelete">
+          <input type="text" id="newEnvironmentDelete" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd">
         </div>
         <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:0.4rem">
           <button class="btn btn-primary" id="btnSaveEnvironment" onclick="saveEnvironment()">+ Afegir</button>
@@ -350,7 +350,7 @@
     </div>
     <div class="modal-body">
       <div class="hw-add-row" id="hwAddRow">
-        <input type="date" id="hwAddDate" title="Data">
+        <input type="text" id="hwAddDate" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" title="Data">
         <input type="number" id="hwAddVcpus" min="0" placeholder="vCPUs">
         <input type="number" id="hwAddMemory" min="0" placeholder="Mem GB">
         <input type="number" id="hwAddDisk0" min="0" placeholder="Disk-0 GB">
@@ -393,11 +393,11 @@
       <div class="report-filters">
         <div class="report-filter-group">
           <label>Data de consulta</label>
-          <input type="date" id="reportDate">
+          <input type="text" id="reportDate" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd">
         </div>
         <div class="report-filter-group">
           <label>Service</label>
-          <select id="reportService" onchange="applyReportFilters()">
+          <select id="reportService" onchange="handleReportFilterChange()">
             <option value="">Tots els services</option>
             <option>Testing</option>
             <option>Production</option>
@@ -406,8 +406,14 @@
           </select>
         </div>
         <div class="report-filter-group">
+          <label>Uses</label>
+          <select id="reportUse" onchange="handleReportFilterChange()">
+            <option value="">Tots els uses</option>
+          </select>
+        </div>
+        <div class="report-filter-group">
           <label>Team</label>
-          <select id="reportTeam" onchange="applyReportFilters()">
+          <select id="reportTeam" onchange="handleReportFilterChange()">
             <option value="">Tots els teams</option>
           </select>
         </div>

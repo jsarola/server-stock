@@ -80,11 +80,60 @@ function diskTotal(s) {
   return (s.disk0 || 0) + (s.disk1 || 0) + (s.disk_extra || 0);
 }
 
+function isoToDisplayDate(val) {
+  if (!val) return '';
+  const text = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.replaceAll('-', '/');
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(text)) return text;
+  return text;
+}
+
+function normalizeDateMask(val) {
+  const digits = String(val || '').replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}/${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}/${digits.slice(4, 6)}/${digits.slice(6, 8)}`;
+}
+
+function toApiDate(val) {
+  if (!val) return '';
+  const text = String(val).trim();
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.replaceAll('-', '/');
+  return text;
+}
+
+function normalizeComparableDate(val) {
+  return toApiDate(val).replaceAll('-', '/');
+}
+
+function isCompleteDateValue(val) {
+  return /^\d{4}\/\d{2}\/\d{2}$/.test(normalizeComparableDate(val));
+}
+
 function fmtDate(val) {
   if (!val) return '—';
-  const parts = val.split('-');
-  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  return val;
+  return isoToDisplayDate(val);
+}
+
+function setDateFieldValue(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = isoToDisplayDate(value);
+}
+
+function initDateInputs(root = document) {
+  root.querySelectorAll('input[data-date-format="yyyy/mm/dd"]').forEach(input => {
+    if (input.dataset.dateMaskReady === '1') return;
+    input.dataset.dateMaskReady = '1';
+    input.autocomplete = 'off';
+    input.addEventListener('input', () => {
+      input.value = normalizeDateMask(input.value);
+    });
+    input.addEventListener('blur', () => {
+      input.value = normalizeDateMask(input.value);
+    });
+    input.value = isoToDisplayDate(input.value);
+  });
 }
 
 function fmt2(val) {
@@ -103,9 +152,12 @@ function compareNumberFilter(actual, op, rawValue) {
 
 function compareDateFilter(actual, op, expected) {
   if (!op || !expected || !actual) return !op || !expected;
-  if (op === '>') return actual > expected;
-  if (op === '<') return actual < expected;
-  if (op === '=') return actual === expected;
+  const actualValue = normalizeComparableDate(actual);
+  const expectedValue = normalizeComparableDate(expected);
+  if (!isCompleteDateValue(actualValue) || !isCompleteDateValue(expectedValue)) return true;
+  if (op === '>') return actualValue > expectedValue;
+  if (op === '<') return actualValue < expectedValue;
+  if (op === '=') return actualValue === expectedValue;
   return true;
 }
 
@@ -387,8 +439,8 @@ function openModal(server = null) {
   document.getElementById('modalTitle').textContent = server ? `Editar: ${server.name}` : 'Nou Servidor';
   document.getElementById('f_name').value = server?.name || '';
   document.getElementById('f_service').value = server?.service || '';
-  document.getElementById('f_data_alta').value = server?.data_alta || '';
-  document.getElementById('f_data_baixa').value = server?.data_baixa || '';
+  setDateFieldValue('f_data_alta', server?.data_alta || '');
+  setDateFieldValue('f_data_baixa', server?.data_baixa || '');
   document.getElementById('f_vcpus').value = server?.vcpus || '';
   document.getElementById('f_memory').value = server?.memory || '';
   document.getElementById('f_disk0').value = server?.disk0 || '';
@@ -418,8 +470,8 @@ async function saveServer() {
     name:           document.getElementById('f_name').value.trim(),
     service:        document.getElementById('f_service').value,
     team_id:        parseInt(document.getElementById('f_team_id').value) || null,
-    data_alta:      document.getElementById('f_data_alta').value || null,
-    data_baixa:     document.getElementById('f_data_baixa').value || null,
+    data_alta:      toApiDate(document.getElementById('f_data_alta').value) || null,
+    data_baixa:     toApiDate(document.getElementById('f_data_baixa').value) || null,
     environment_id: parseInt(document.getElementById('f_environment_id').value) || null,
     vcpus:          parseInt(document.getElementById('f_vcpus').value) || 0,
     memory:         parseInt(document.getElementById('f_memory').value) || 0,
@@ -687,8 +739,8 @@ function editEnvironmentItem(id) {
   if (!r) return;
   editingEnvironmentId = id;
   document.getElementById('newEnvironmentName').value = r.name;
-  document.getElementById('newEnvironmentCreate').value = r.create_date || '';
-  document.getElementById('newEnvironmentDelete').value = r.delete_date || '';
+  setDateFieldValue('newEnvironmentCreate', r.create_date || '');
+  setDateFieldValue('newEnvironmentDelete', r.delete_date || '');
   document.getElementById('btnSaveEnvironment').textContent = '✓ Actualitzar';
   document.getElementById('btnCancelEnvironment').style.display = '';
   renderEnvironmentsManager();
@@ -703,7 +755,7 @@ function cancelEnvironmentEdit() {
   const saveBtn   = document.getElementById('btnSaveEnvironment');
   const cancelBtn = document.getElementById('btnCancelEnvironment');
   if (nameEl)    nameEl.value = '';
-  if (createEl)  createEl.value = new Date().toISOString().slice(0, 10);
+  if (createEl)  createEl.value = isoToDisplayDate(new Date().toISOString().slice(0, 10));
   if (deleteEl)  deleteEl.value = '';
   if (saveBtn)   saveBtn.textContent = '+ Afegir';
   if (cancelBtn) cancelBtn.style.display = 'none';
@@ -721,8 +773,8 @@ async function saveEnvironment() {
 async function createEnvironment() {
   const name = document.getElementById('newEnvironmentName').value.trim();
   if (!name) return;
-  const create_date = document.getElementById('newEnvironmentCreate').value || null;
-  const delete_date = document.getElementById('newEnvironmentDelete').value || null;
+  const create_date = toApiDate(document.getElementById('newEnvironmentCreate').value) || null;
+  const delete_date = toApiDate(document.getElementById('newEnvironmentDelete').value) || null;
   const res = await fetch('/api/environments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -742,8 +794,8 @@ async function createEnvironment() {
 async function updateEnvironmentEntry() {
   const name = document.getElementById('newEnvironmentName').value.trim();
   if (!name) return;
-  const create_date = document.getElementById('newEnvironmentCreate').value || null;
-  const delete_date = document.getElementById('newEnvironmentDelete').value || null;
+  const create_date = toApiDate(document.getElementById('newEnvironmentCreate').value) || null;
+  const delete_date = toApiDate(document.getElementById('newEnvironmentDelete').value) || null;
   const id = editingEnvironmentId;
   const res = await fetch(`/api/environments/${id}`, {
     method: 'PUT',
@@ -818,8 +870,8 @@ function renderEnvironmentPricesPanel(environmentId) {
         <input type="number" step="0.0001" min="0" id="ep_vcpu_${p.id}" value="${p.price_vcpu}">
         <input type="number" step="0.0001" min="0" id="ep_mem_${p.id}" value="${p.price_mem}">
         <input type="number" step="0.0001" min="0" id="ep_disk_${p.id}" value="${p.price_disk}">
-        <input type="date" id="ep_start_${p.id}" value="${p.start_date || ''}">
-        <input type="date" id="ep_end_${p.id}" value="${p.end_date || ''}">
+        <input type="text" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" id="ep_start_${p.id}" value="${isoToDisplayDate(p.start_date || '')}">
+        <input type="text" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" id="ep_end_${p.id}" value="${isoToDisplayDate(p.end_date || '')}">
         <div class="price-actions">
           <button class="save" onclick="savePriceRow(${environmentId}, ${p.id})" title="Guardar">✓</button>
           <button class="del" onclick="cancelPriceEdit(${environmentId})" title="Cancel·lar">✕</button>
@@ -850,10 +902,12 @@ function renderEnvironmentPricesPanel(environmentId) {
       <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_vcpu_${environmentId}">
       <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_mem_${environmentId}">
       <input type="number" step="0.0001" min="0" placeholder="0.0000" id="np_disk_${environmentId}">
-      <input type="date" id="np_start_${environmentId}">
-      <input type="date" id="np_end_${environmentId}">
+      <input type="text" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" id="np_start_${environmentId}">
+      <input type="text" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" id="np_end_${environmentId}">
       <button class="price-add-btn" onclick="createEnvironmentPrice(${environmentId})">+</button>
     </div>`;
+
+  initDateInputs(panel);
 }
 
 function editPriceRow(environmentId, priceId) {
@@ -871,8 +925,8 @@ async function savePriceRow(environmentId, priceId) {
     price_vcpu: parseFloat(document.getElementById(`ep_vcpu_${priceId}`).value) || 0,
     price_mem:  parseFloat(document.getElementById(`ep_mem_${priceId}`).value) || 0,
     price_disk: parseFloat(document.getElementById(`ep_disk_${priceId}`).value) || 0,
-    start_date: document.getElementById(`ep_start_${priceId}`).value || null,
-    end_date:   document.getElementById(`ep_end_${priceId}`).value || null,
+    start_date: toApiDate(document.getElementById(`ep_start_${priceId}`).value) || null,
+    end_date:   toApiDate(document.getElementById(`ep_end_${priceId}`).value) || null,
   };
   const res = await fetch(`/api/environments/${environmentId}/prices/${priceId}`, {
     method: 'PUT',
@@ -894,8 +948,8 @@ async function createEnvironmentPrice(environmentId) {
     price_vcpu: parseFloat(document.getElementById(`np_vcpu_${environmentId}`).value) || 0,
     price_mem:  parseFloat(document.getElementById(`np_mem_${environmentId}`).value) || 0,
     price_disk: parseFloat(document.getElementById(`np_disk_${environmentId}`).value) || 0,
-    start_date: document.getElementById(`np_start_${environmentId}`).value || null,
-    end_date:   document.getElementById(`np_end_${environmentId}`).value || null,
+    start_date: toApiDate(document.getElementById(`np_start_${environmentId}`).value) || null,
+    end_date:   toApiDate(document.getElementById(`np_end_${environmentId}`).value) || null,
   };
   const res = await fetch(`/api/environments/${environmentId}/prices`, {
     method: 'POST',
@@ -935,7 +989,7 @@ function openHwHistoryModal(serverId, serverName) {
   document.getElementById('hwHistoryTitle').textContent = `Historial Maquinari — ${serverName}`;
   document.getElementById('hwHistoryOverlay').classList.add('open');
   const today = new Date().toISOString().slice(0, 10);
-  document.getElementById('hwAddDate').value = today;
+  setDateFieldValue('hwAddDate', today);
   document.getElementById('hwAddVcpus').value = '';
   document.getElementById('hwAddMemory').value = '';
   document.getElementById('hwAddDisk0').value = '';
@@ -970,7 +1024,7 @@ function renderHwHistory() {
     const total = diskTotal(r);
     if (editingHwDate === r.data_modificacio) {
       return `<tr class="editing">
-        <td><input type="date" id="hw_edit_date" value="${r.data_modificacio}"></td>
+        <td><input type="text" data-date-format="yyyy/mm/dd" inputmode="numeric" maxlength="10" placeholder="yyyy/mm/dd" id="hw_edit_date" value="${isoToDisplayDate(r.data_modificacio)}"></td>
         <td class="num"><input type="number" id="hw_edit_vcpus" min="0" value="${r.vcpus}"></td>
         <td class="num"><input type="number" id="hw_edit_memory" min="0" value="${r.memory}"></td>
         <td class="num"><input type="number" id="hw_edit_disk0" min="0" value="${r.disk0}"></td>
@@ -997,6 +1051,8 @@ function renderHwHistory() {
       </td>
     </tr>`;
   }).join('');
+
+  initDateInputs(tbody);
 }
 
 function editHwRow(date) {
@@ -1010,7 +1066,7 @@ function cancelHwEdit() {
 }
 
 async function saveHwRow(originalDate) {
-  const newDate = document.getElementById('hw_edit_date').value;
+  const newDate = toApiDate(document.getElementById('hw_edit_date').value);
   if (!newDate) { showToast('La data és obligatòria', 'error'); return; }
   const payload = {
     data_modificacio: newDate,
@@ -1036,7 +1092,7 @@ async function saveHwRow(originalDate) {
 }
 
 async function createHwSnapshot() {
-  const dateVal = document.getElementById('hwAddDate').value;
+  const dateVal = toApiDate(document.getElementById('hwAddDate').value);
   if (!dateVal) { showToast('La data és obligatòria', 'error'); return; }
   const payload = {
     data_modificacio: dateVal,
@@ -1077,15 +1133,55 @@ async function deleteHwRow(date) {
 
 function applyActiveFilters(data) {
   const filterService = document.getElementById('reportService').value;
+  const filterUse     = document.getElementById('reportUse').value;
   const filterTeam    = document.getElementById('reportTeam').value;
   return data.filter(s => {
     if (filterService && s.service !== filterService) return false;
+    if (filterUse && !(s.uses || []).includes(filterUse)) return false;
     if (filterTeam    && s.team    !== filterTeam)    return false;
     return true;
   });
 }
 
 let reportData = [];
+
+function populateReportSelect(selectId, values, defaultLabel) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  const currentValue = select.value;
+  select.innerHTML = `<option value="">${defaultLabel}</option>` +
+    values.map(value => `<option value="${value}">${value}</option>`).join('');
+  select.value = values.includes(currentValue) ? currentValue : '';
+}
+
+function syncReportFilterOptions() {
+  const service = document.getElementById('reportService').value;
+  const useSelect = document.getElementById('reportUse');
+
+  const useValues = [...new Set(
+    reportData
+      .filter(s => !service || s.service === service)
+      .flatMap(s => s.uses || [])
+  )].sort((a, b) => a.localeCompare(b));
+
+  populateReportSelect('reportUse', useValues, 'Tots els uses');
+
+  const selectedUse = useSelect.value;
+  const teamValues = [...new Set(
+    reportData
+      .filter(s => !service || s.service === service)
+      .filter(s => !selectedUse || (s.uses || []).includes(selectedUse))
+      .map(s => s.team)
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+
+  populateReportSelect('reportTeam', teamValues, 'Tots els teams');
+}
+
+function handleReportFilterChange() {
+  syncReportFilterOptions();
+  applyReportFilters();
+}
 
 function openReportModal() {
   reportData = [];
@@ -1094,9 +1190,10 @@ function openReportModal() {
   document.getElementById('reportStats').innerHTML = '';
   document.getElementById('btnInvoice').style.display = 'none';
   document.getElementById('reportService').value = '';
+  document.getElementById('reportUse').innerHTML = '<option value="">Tots els uses</option>';
   document.getElementById('reportTeam').innerHTML = '<option value="">Tots els teams</option>';
   const today = new Date().toISOString().slice(0, 10);
-  document.getElementById('reportDate').value = today;
+  setDateFieldValue('reportDate', today);
 }
 
 function closeReportModal() {
@@ -1108,10 +1205,11 @@ function handleReportOverlayClick(e) {
 }
 
 async function runReport() {
-  const dateVal = document.getElementById('reportDate').value;
+  const dateVal = toApiDate(document.getElementById('reportDate').value);
   if (!dateVal) { showToast('Selecciona una data', 'error'); return; }
+  if (!isCompleteDateValue(dateVal)) { showToast('La data ha de tenir format yyyy/mm/dd', 'error'); return; }
 
-  const res = await fetch(`/api/report/hardware?date=${dateVal}`);
+  const res = await fetch(`/api/report/hardware?date=${encodeURIComponent(dateVal)}`);
   const data = await res.json();
 
   if (!res.ok) {
@@ -1120,13 +1218,7 @@ async function runReport() {
   }
 
   reportData = data;
-
-  const teams = [...new Set(data.map(s => s.team).filter(Boolean))].sort();
-  const teamSel = document.getElementById('reportTeam');
-  const prevTeam = teamSel.value;
-  teamSel.innerHTML = '<option value="">Tots els teams</option>' +
-    teams.map(t => `<option value="${t}"${t === prevTeam ? ' selected' : ''}>${t}</option>`).join('');
-
+  syncReportFilterOptions();
   applyReportFilters();
 }
 
@@ -1202,14 +1294,15 @@ function applyReportFilters() {
 let invoiceData = [];
 
 async function openInvoiceModal() {
-  const dateVal = document.getElementById('reportDate').value;
+  const dateVal = toApiDate(document.getElementById('reportDate').value);
+  if (!isCompleteDateValue(dateVal)) { showToast('La data ha de tenir format yyyy/mm/dd', 'error'); return; }
   document.getElementById('invoiceTitle').textContent = `Factura — ${fmtDate(dateVal)}`;
   document.getElementById('invoiceModalOverlay').classList.add('open');
   document.getElementById('invoiceResults').innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem">Carregant...</p>';
   document.getElementById('invoiceGrandTotal').innerHTML = '';
   document.getElementById('btnInvoiceCsv').style.display = 'none';
 
-  const res = await fetch(`/api/report/invoice?date=${dateVal}`);
+  const res = await fetch(`/api/report/invoice?date=${encodeURIComponent(dateVal)}`);
   const data = await res.json();
   if (!res.ok) { showToast(data.error || 'Error en la factura', 'error'); return; }
 
@@ -1348,7 +1441,7 @@ function downloadInvoiceCsv() {
     .map(row => row.map(escapeCsvValue).join(';'))
     .join('\n');
 
-  const dateVal = document.getElementById('reportDate').value || 'factura';
+  const dateVal = (normalizeComparableDate(document.getElementById('reportDate').value) || 'factura').replaceAll('/', '-');
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1378,4 +1471,5 @@ document.addEventListener('click', e => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 initTheme();
+initDateInputs();
 Promise.all([loadUses(), loadTeams(), loadEnvironments(), loadServers()]);

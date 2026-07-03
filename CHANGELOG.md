@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## [v0.2] - 2026-07-03
+
+### Added
+- Filtre per `uses` al formulari d'informe de maquinari.
+
+### Changed
+- Totes les dates visibles a la UI ara es mostren amb format `yyyy/mm/dd`.
+- Els camps de data dels formularis utilitzen una mascara d'entrada `yyyy/mm/dd`.
+- El boto `Nomes actius` ara canvia a vermell quan esta actiu i recupera l'estil original en desactivar-lo.
+
+### Fixed
+- El formulari d'informe ara actualitza les opcions dependents de `uses` i `teams` quan es canvia el `service`.
+- El backend accepta dates tant en format `yyyy-mm-dd` com `yyyy/mm/dd` per evitar errors de validacio amb la nova UI.
+
 ## [v0.1-beta] - 2026-07-03
 
 ### Added
